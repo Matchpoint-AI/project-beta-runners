@@ -50,8 +50,8 @@ GITHUB_APP_ID = os.environ.get("GITHUB_APP_ID")
 GITHUB_APP_PRIVATE_KEY = os.environ.get("GITHUB_APP_PRIVATE_KEY")
 GITHUB_APP_INSTALLATION_ID = os.environ.get("GITHUB_APP_INSTALLATION_ID")
 
-# Polling configuration
-POLL_INTERVAL_SECONDS = int(os.environ.get("POLL_INTERVAL_SECONDS", "30"))
+# Polling configuration - 5 seconds for aggressive job pickup (Issue #33)
+POLL_INTERVAL_SECONDS = int(os.environ.get("POLL_INTERVAL_SECONDS", "5"))
 POLL_ENABLED = os.environ.get("POLL_ENABLED", "true").lower() == "true"
 
 # Track recently triggered jobs to avoid duplicates (thread-safe deque)
