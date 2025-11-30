@@ -74,6 +74,24 @@ resource "google_cloud_run_v2_job" "runner" {
             }
           }
         }
+
+        # Docker host for testcontainers (Cloud Run cannot run privileged containers)
+        dynamic "env" {
+          for_each = var.docker_host_url != "" ? [1] : []
+          content {
+            name  = "DOCKER_HOST"
+            value = var.docker_host_url
+          }
+        }
+
+        # Testcontainers configuration for remote Docker
+        dynamic "env" {
+          for_each = var.docker_host_url != "" ? [1] : []
+          content {
+            name  = "TESTCONTAINERS_HOST_OVERRIDE"
+            value = regex("tcp://([^:]+):", var.docker_host_url)[0]
+          }
+        }
       }
 
       # Service account
