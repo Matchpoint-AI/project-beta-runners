@@ -108,7 +108,7 @@ variable "poll_enabled" {
 }
 
 variable "poll_interval_seconds" {
-  description = "Interval between poll cycles in seconds"
+  description = "Interval between poll cycles in seconds (Issue #33)"
   type        = number
-  default     = 30
+  default     = 5
 }
