@@ -1,0 +1,96 @@
+################################################################################
+# Terraform Force Unlock - Manual State Lock Release
+################################################################################
+# Use this workflow to release a stuck Terraform state lock.
+# Only use when you're certain no other Terraform operations are running.
+#
+# Issue: https://github.com/Matchpoint-AI/project-beta-runners/issues/26
+################################################################################
+
+name: Terraform Force Unlock
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to unlock'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - prod
+      lock_id:
+        description: 'Lock ID to release (from error message)'
+        required: true
+        type: string
+      confirm:
+        description: 'Type "UNLOCK" to confirm'
+        required: true
+        type: string
+
+env:
+  TF_VERSION: '1.5.7'
+
+jobs:
+  unlock:
+    name: Force Unlock State
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Verify confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "UNLOCK" ]; then
+            echo "::error::Confirmation failed. You must type 'UNLOCK' to confirm."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Set working directory
+        id: workdir
+        run: |
+          ENV="${{ github.event.inputs.environment }}"
+          echo "dir=terraform/environments/${ENV}" >> $GITHUB_OUTPUT
+          echo "Force unlocking environment: ${ENV}"
+          echo "Lock ID: ${{ github.event.inputs.lock_id }}"
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ${{ steps.workdir.outputs.dir }}
+
+      - name: Force Unlock
+        run: |
+          echo "::warning::Forcing unlock of state lock ID: ${{ github.event.inputs.lock_id }}"
+          terraform force-unlock -force ${{ github.event.inputs.lock_id }}
+        working-directory: ${{ steps.workdir.outputs.dir }}
+
+      - name: Summary
+        run: |
+          echo "## Terraform Force Unlock Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | ${{ github.event.inputs.environment }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Lock ID | ${{ github.event.inputs.lock_id }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Status | Unlocked |" >> $GITHUB_STEP_SUMMARY
