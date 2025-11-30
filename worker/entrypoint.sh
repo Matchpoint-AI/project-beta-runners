@@ -196,7 +196,7 @@ main() {
     trap cleanup SIGTERM SIGINT SIGQUIT
 
     # Generate registration token
-    RUNNER_TOKEN=$(generate_runner_token)
+    RUNNER_TOKEN=$(generate_runner_token | tr -d '\n\r')
     if [ -z "$RUNNER_TOKEN" ]; then
         log_error "Failed to generate runner token"
         exit 1
