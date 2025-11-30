@@ -1,5 +1,6 @@
-# Variables for worker-pool module
-# TODO: Implementation tracked in Issue #X
+################################################################################
+# Worker Pool Module - Variables
+################################################################################
 
 variable "project_id" {
   description = "GCP Project ID"
@@ -9,49 +10,65 @@ variable "project_id" {
 variable "region" {
   description = "GCP Region"
   type        = string
+  default     = "us-central1"
 }
 
-variable "worker_pool_name" {
-  description = "Name of the worker pool"
+variable "name" {
+  description = "Name of the Cloud Run Job"
   type        = string
-  default     = "github-runners"
+  default     = "github-runner"
 }
 
 variable "image" {
-  description = "Container image for the runner"
+  description = "Container image URL for the runner (from Artifact Registry)"
   type        = string
 }
 
-variable "min_instances" {
-  description = "Minimum instances (set to 0 for scale-to-zero)"
-  type        = number
-  default     = 0
+variable "service_account_email" {
+  description = "Service account email for the runner job"
+  type        = string
 }
 
-variable "max_instances" {
-  description = "Maximum instances"
-  type        = number
-  default     = 10
+variable "autoscaler_service_account_email" {
+  description = "Service account email for the autoscaler (needs invoker role)"
+  type        = string
 }
 
 variable "cpu" {
-  description = "CPU allocation"
+  description = "CPU allocation per runner instance"
   type        = string
   default     = "2"
 }
 
 variable "memory" {
-  description = "Memory allocation"
+  description = "Memory allocation per runner instance"
   type        = string
   default     = "4Gi"
 }
 
-variable "service_account_email" {
-  description = "Service account for the worker pool"
-  type        = string
+variable "job_timeout_seconds" {
+  description = "Maximum time for a single workflow job (in seconds)"
+  type        = number
+  default     = 3600 # 1 hour
 }
 
-variable "github_token_secret_id" {
-  description = "Secret Manager secret ID for GitHub token"
+variable "github_org" {
+  description = "GitHub organization name"
   type        = string
+  default     = "Matchpoint-AI"
+}
+
+variable "runner_labels" {
+  description = "Comma-separated labels for the runner"
+  type        = string
+  default     = "self-hosted,cloud-run,linux,x64"
+}
+
+variable "secrets" {
+  description = "Secret Manager secret IDs for GitHub App credentials"
+  type = object({
+    app_id          = string
+    installation_id = string
+    private_key     = string
+  })
 }
