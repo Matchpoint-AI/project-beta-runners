@@ -9,13 +9,13 @@
 
 locals {
   required_apis = [
-    "run.googleapis.com",               # Cloud Run (worker pools and services)
-    "cloudbuild.googleapis.com",        # Cloud Build (CI/CD)
-    "artifactregistry.googleapis.com",  # Artifact Registry (container images)
-    "secretmanager.googleapis.com",     # Secret Manager (GitHub credentials)
-    "iam.googleapis.com",               # IAM (service accounts and roles)
+    "run.googleapis.com",                  # Cloud Run (worker pools and services)
+    "cloudbuild.googleapis.com",           # Cloud Build (CI/CD)
+    "artifactregistry.googleapis.com",     # Artifact Registry (container images)
+    "secretmanager.googleapis.com",        # Secret Manager (GitHub credentials)
+    "iam.googleapis.com",                  # IAM (service accounts and roles)
     "cloudresourcemanager.googleapis.com", # Resource Manager (project access)
-    "compute.googleapis.com",           # Compute Engine (networking)
+    "compute.googleapis.com",              # Compute Engine (networking)
   ]
 }
 
