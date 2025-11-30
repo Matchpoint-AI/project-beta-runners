@@ -453,15 +453,35 @@ def root():
     })
 
 
-if __name__ == "__main__":
-    # Start polling thread if enabled
+# =============================================================================
+# Module Initialization - Start Polling Thread
+# =============================================================================
+# Start polling thread at module load time so it runs with gunicorn.
+# Gunicorn workers import this module, so this code runs for each worker.
+# The daemon=True flag ensures the thread stops when the main process exits.
+
+_polling_thread_started = False
+
+def start_polling_thread():
+    """Start the polling thread if not already started."""
+    global _polling_thread_started
+    if _polling_thread_started:
+        return
+
     if POLL_ENABLED and GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY:
         polling_thread = threading.Thread(target=polling_loop, daemon=True)
         polling_thread.start()
         logger.info("Polling thread started")
+        _polling_thread_started = True
     else:
         logger.warning("Polling disabled or GitHub App credentials not configured")
 
+
+# Auto-start polling when module is imported (works with gunicorn)
+start_polling_thread()
+
+
+if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     logger.info(f"Starting autoscaler on port {port}")
     app.run(host="0.0.0.0", port=port)
