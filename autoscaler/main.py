@@ -58,7 +58,8 @@ POLL_ENABLED = os.environ.get("POLL_ENABLED", "true").lower() == "true"
 # Stores (job_id, timestamp) tuples
 RECENTLY_TRIGGERED = deque(maxlen=1000)
 RECENTLY_TRIGGERED_LOCK = threading.Lock()
-TRIGGER_COOLDOWN_SECONDS = 120  # Don't re-trigger same job within 2 minutes
+TRIGGER_COOLDOWN_SECONDS = 30  # Don't re-trigger same job within 30 seconds
+MAX_CONCURRENT_TRIGGERS = 10  # Max jobs to trigger per poll cycle
 
 
 def verify_webhook_signature(payload: bytes, signature: str) -> bool:
@@ -114,9 +115,14 @@ def mark_as_triggered(job_id: int):
         RECENTLY_TRIGGERED.append((job_id, datetime.now()))
 
 
-def execute_runner_job(run_id: str) -> Optional[str]:
+def execute_runner_job(run_id: str, wait_for_result: bool = False) -> Optional[str]:
     """
     Execute a Cloud Run Job to handle the workflow job.
+
+    Args:
+        run_id: Identifier for logging/tracking
+        wait_for_result: If True, wait for execution to start (blocking).
+                         If False, fire and forget (non-blocking).
     """
     if not GCP_PROJECT_ID:
         logger.error("GCP_PROJECT_ID not configured")
@@ -128,10 +134,17 @@ def execute_runner_job(run_id: str) -> Optional[str]:
 
         logger.info(f"Executing job: {job_name}")
         operation = client.run_job(name=job_name)
-        execution = operation.result()
 
-        logger.info(f"Job execution started: {execution.name}")
-        return execution.name
+        if wait_for_result:
+            # Blocking: wait for execution to start
+            execution = operation.result()
+            logger.info(f"Job execution started: {execution.name}")
+            return execution.name
+        else:
+            # Non-blocking: fire and forget
+            # The operation is already submitted, we just return a placeholder
+            logger.info(f"Job execution triggered (async): {job_name}")
+            return f"{job_name}/executions/triggered-{run_id}"
 
     except Exception as e:
         logger.error(f"Failed to execute runner job: {e}")
@@ -280,6 +293,7 @@ def get_queued_jobs_for_org(token: str) -> list[dict]:
 def poll_and_trigger():
     """
     Poll for queued jobs and trigger runners for any that need them.
+    Uses non-blocking job execution to trigger multiple runners quickly.
     """
     logger.info("Polling for queued jobs...")
 
@@ -293,6 +307,11 @@ def poll_and_trigger():
 
     triggered_count = 0
     for job in queued_jobs:
+        # Limit concurrent triggers to avoid overwhelming the system
+        if triggered_count >= MAX_CONCURRENT_TRIGGERS:
+            logger.info(f"Reached max concurrent triggers ({MAX_CONCURRENT_TRIGGERS}), will continue next poll")
+            break
+
         job_id = job["id"]
 
         if was_recently_triggered(job_id):
@@ -301,7 +320,8 @@ def poll_and_trigger():
 
         logger.info(f"Triggering runner for stuck job: {job['name']} (id={job_id}, repo={job['repo']})")
 
-        execution_name = execute_runner_job(f"poll-{job_id}")
+        # Use non-blocking mode for polling to trigger multiple runners quickly
+        execution_name = execute_runner_job(f"poll-{job_id}", wait_for_result=False)
         if execution_name:
             mark_as_triggered(job_id)
             triggered_count += 1
@@ -393,7 +413,8 @@ def handle_webhook():
         })
 
     run_id = f"{job_id}-{delivery_id[:8]}"
-    execution_name = execute_runner_job(run_id)
+    # Use blocking mode for webhooks to provide immediate feedback
+    execution_name = execute_runner_job(run_id, wait_for_result=True)
 
     if execution_name:
         mark_as_triggered(job_id)
