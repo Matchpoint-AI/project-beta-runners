@@ -2,21 +2,27 @@
 # GitHub Actions Runner for Cloud Run
 ################################################################################
 # Production-ready container image for self-hosted GitHub Actions runners.
-# Based on the official actions/runner image with additional tools for
-# project-beta workflows.
+# Built from Ubuntu with GitHub Actions runner installed manually.
 #
 # Issue: https://github.com/Matchpoint-AI/project-beta-runners/issues/7
 ################################################################################
 
-FROM ghcr.io/actions/runner:latest
+FROM ubuntu:22.04
 
 # Build arguments for tool versions
+ARG RUNNER_VERSION=2.321.0
 ARG TERRAFORM_VERSION=1.5.7
 ARG GO_VERSION=1.21.5
 ARG NODE_VERSION=20
 
-# Switch to root for installations
-USER root
+ENV DEBIAN_FRONTEND=noninteractive
+
+#------------------------------------------------------------------------------
+# Create runner user
+#------------------------------------------------------------------------------
+RUN useradd -m -s /bin/bash runner \
+    && mkdir -p /home/runner \
+    && chown -R runner:runner /home/runner
 
 #------------------------------------------------------------------------------
 # System Dependencies
@@ -90,6 +96,14 @@ RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /
     && apt-get update && apt-get install -y docker-ce-cli \
     && rm -rf /var/lib/apt/lists/* \
     && docker --version
+
+#------------------------------------------------------------------------------
+# GitHub Actions Runner
+#------------------------------------------------------------------------------
+WORKDIR /home/runner
+RUN curl -sL "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz" | tar xz \
+    && ./bin/installdependencies.sh \
+    && chown -R runner:runner /home/runner
 
 #------------------------------------------------------------------------------
 # Entrypoint
