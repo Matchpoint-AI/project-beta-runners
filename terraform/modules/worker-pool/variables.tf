@@ -72,3 +72,13 @@ variable "secrets" {
     private_key     = string
   })
 }
+
+#------------------------------------------------------------------------------
+# Docker Host Configuration (for testcontainers support)
+#------------------------------------------------------------------------------
+
+variable "docker_host_url" {
+  description = "URL for remote Docker daemon (e.g., tcp://10.0.0.5:2375). Required for testcontainers since Cloud Run cannot run privileged containers."
+  type        = string
+  default     = ""
+}
