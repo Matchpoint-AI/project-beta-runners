@@ -1,0 +1,33 @@
+# Cloud Build configuration for building the worker image
+# Triggered on changes to worker/ directory
+
+# TODO: Full implementation tracked in Issue #X
+
+steps:
+  # Build the worker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/github-runner:${SHORT_SHA}'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/github-runner:latest'
+      - './worker'
+
+  # Push the image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '--all-tags'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/github-runner'
+
+substitutions:
+  _REGION: 'us-central1'
+  _ARTIFACT_REPO: 'github-runners'
+
+images:
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/github-runner:${SHORT_SHA}'
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/github-runner:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

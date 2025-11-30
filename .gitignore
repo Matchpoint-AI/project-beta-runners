@@ -1,0 +1,38 @@
+# Terraform
+*.tfstate
+*.tfstate.*
+*.tfplan
+.terraform/
+.terraform.lock.hcl
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+*.auto.tfvars
+
+# Local .terraform directories
+**/.terraform/*
+
+# Secrets (never commit)
+*.pem
+*.key
+secrets.auto.tfvars
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+venv/
+.venv/
+
+# OS
+.DS_Store
+Thumbs.db
