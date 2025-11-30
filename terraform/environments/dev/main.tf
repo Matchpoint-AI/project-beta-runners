@@ -136,6 +136,7 @@ module "worker_pool" {
 #------------------------------------------------------------------------------
 
 # Issue #11: Autoscaler - Cloud Run Service for webhook processing
+# Issue #25: Added polling fallback for stuck jobs
 module "autoscaler" {
   source     = "../../modules/autoscaler"
   project_id = var.project_id
@@ -153,6 +154,16 @@ module "autoscaler" {
 
   # Webhook secret
   webhook_secret_id = module.secrets.webhook_secret_id
+
+  # GitHub App credentials for polling (Issue #25)
+  github_app_id_secret_id              = module.secrets.github_app_id_secret_id
+  github_app_installation_id_secret_id = module.secrets.github_app_installation_id_secret_id
+  github_app_private_key_secret_id     = module.secrets.github_app_private_key_secret_id
+  github_org                           = var.github_org
+
+  # Polling configuration
+  poll_enabled          = var.poll_enabled
+  poll_interval_seconds = var.poll_interval_seconds
 
   depends_on = [module.worker_pool]
 }
@@ -224,6 +235,22 @@ variable "autoscaler_name" {
 variable "autoscaler_image" {
   description = "Container image URL for the autoscaler"
   type        = string
+}
+
+#------------------------------------------------------------------------------
+# Polling Configuration (Issue #25)
+#------------------------------------------------------------------------------
+
+variable "poll_enabled" {
+  description = "Enable background polling for stuck jobs"
+  type        = bool
+  default     = true
+}
+
+variable "poll_interval_seconds" {
+  description = "Interval between poll cycles in seconds"
+  type        = number
+  default     = 30
 }
 
 #------------------------------------------------------------------------------

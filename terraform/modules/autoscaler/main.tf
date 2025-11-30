@@ -61,6 +61,62 @@ resource "google_cloud_run_v2_service" "autoscaler" {
         }
       }
 
+      # GitHub App credentials for polling (from Secret Manager)
+      dynamic "env" {
+        for_each = var.github_app_id_secret_id != "" ? [1] : []
+        content {
+          name = "GITHUB_APP_ID"
+          value_source {
+            secret_key_ref {
+              secret  = var.github_app_id_secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+
+      dynamic "env" {
+        for_each = var.github_app_installation_id_secret_id != "" ? [1] : []
+        content {
+          name = "GITHUB_APP_INSTALLATION_ID"
+          value_source {
+            secret_key_ref {
+              secret  = var.github_app_installation_id_secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+
+      dynamic "env" {
+        for_each = var.github_app_private_key_secret_id != "" ? [1] : []
+        content {
+          name = "GITHUB_APP_PRIVATE_KEY"
+          value_source {
+            secret_key_ref {
+              secret  = var.github_app_private_key_secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+
+      # Polling configuration
+      env {
+        name  = "GITHUB_ORG"
+        value = var.github_org
+      }
+
+      env {
+        name  = "POLL_ENABLED"
+        value = var.poll_enabled ? "true" : "false"
+      }
+
+      env {
+        name  = "POLL_INTERVAL_SECONDS"
+        value = tostring(var.poll_interval_seconds)
+      }
+
       ports {
         container_port = 8080
       }
