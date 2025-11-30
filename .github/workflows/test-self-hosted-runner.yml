@@ -1,0 +1,20 @@
+name: Test Self-Hosted Runner
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-runner:
+    runs-on: [self-hosted, cloud-run, linux, x64]
+    steps:
+      - name: System Info
+        run: |
+          echo "=== Runner Test ==="
+          echo "Hostname: $(hostname)"
+          echo "OS: $(uname -a)"
+          echo "Working Directory: $(pwd)"
+          echo "Terraform: $(terraform version | head -1)"
+          echo "Node: $(node --version)"
+          echo "Python: $(python3 --version)"
+          echo "Go: $(go version)"
+          echo "=== Test Complete ==="
