@@ -1,0 +1,130 @@
+################################################################################
+# Terraform CD - Apply on Push to Main
+################################################################################
+# Automatically applies Terraform changes when merged to main.
+# Runs validate, plan, then apply in sequence.
+################################################################################
+
+name: Terraform CD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform-*.yaml'
+
+  # Allow manual trigger for initial deployment
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - prod
+
+env:
+  TF_VERSION: '1.5.7'
+
+concurrency:
+  group: terraform-${{ github.ref }}
+  cancel-in-progress: false  # Don't cancel in-progress deployments
+
+jobs:
+  deploy:
+    name: Deploy Infrastructure
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+
+    permissions:
+      contents: read
+      id-token: write  # For Workload Identity Federation
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Set working directory
+        id: workdir
+        run: |
+          ENV="${{ github.event.inputs.environment || 'dev' }}"
+          echo "dir=terraform/environments/${ENV}" >> $GITHUB_OUTPUT
+          echo "Deploying to environment: ${ENV}"
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ${{ steps.workdir.outputs.dir }}
+
+      - name: Terraform Validate
+        run: terraform validate
+        working-directory: ${{ steps.workdir.outputs.dir }}
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan \
+            -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
+            -out=tfplan \
+            -detailed-exitcode
+        working-directory: ${{ steps.workdir.outputs.dir }}
+        continue-on-error: true
+
+      - name: Check Plan Result
+        run: |
+          EXIT_CODE=${{ steps.plan.outputs.exitcode }}
+          if [ "$EXIT_CODE" = "0" ]; then
+            echo "No changes detected"
+            echo "APPLY_NEEDED=false" >> $GITHUB_ENV
+          elif [ "$EXIT_CODE" = "2" ]; then
+            echo "Changes detected, will apply"
+            echo "APPLY_NEEDED=true" >> $GITHUB_ENV
+          else
+            echo "Plan failed"
+            exit 1
+          fi
+
+      - name: Terraform Apply
+        if: env.APPLY_NEEDED == 'true'
+        run: terraform apply -auto-approve tfplan
+        working-directory: ${{ steps.workdir.outputs.dir }}
+
+      - name: Terraform Output
+        if: success()
+        run: terraform output -json > outputs.json
+        working-directory: ${{ steps.workdir.outputs.dir }}
+
+      - name: Upload Outputs
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-outputs-${{ github.event.inputs.environment || 'dev' }}
+          path: ${{ steps.workdir.outputs.dir }}/outputs.json
+          retention-days: 7
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Terraform Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | ${{ github.event.inputs.environment || 'dev' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Applied | ${{ env.APPLY_NEEDED }} |" >> $GITHUB_STEP_SUMMARY
