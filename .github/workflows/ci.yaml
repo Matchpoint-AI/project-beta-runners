@@ -1,0 +1,59 @@
+################################################################################
+# CI - Runs on all Pull Requests
+################################################################################
+# Required check for branch protection. Runs basic validation on all PRs.
+################################################################################
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for Terraform changes
+        id: tf_changes
+        run: |
+          if git diff --name-only origin/main...HEAD | grep -q "^terraform/"; then
+            echo "has_terraform=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_terraform=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup Terraform
+        if: steps.tf_changes.outputs.has_terraform == 'true'
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.5.7'
+
+      - name: Terraform Format Check
+        if: steps.tf_changes.outputs.has_terraform == 'true'
+        run: terraform fmt -check -recursive
+        working-directory: terraform
+
+      - name: Terraform Init (no backend)
+        if: steps.tf_changes.outputs.has_terraform == 'true'
+        run: terraform init -backend=false
+        working-directory: terraform/environments/dev
+
+      - name: Terraform Validate
+        if: steps.tf_changes.outputs.has_terraform == 'true'
+        run: terraform validate -no-color
+        working-directory: terraform/environments/dev
+
+      - name: Validation Summary
+        run: |
+          echo "## Validation Complete ✅" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.tf_changes.outputs.has_terraform }}" == "true" ]; then
+            echo "- Terraform validation passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- No Terraform changes to validate" >> $GITHUB_STEP_SUMMARY
+          fi
