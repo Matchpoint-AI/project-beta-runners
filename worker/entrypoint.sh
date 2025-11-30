@@ -30,10 +30,10 @@ RUNNER_LABELS="${RUNNER_LABELS:-self-hosted,cloud-run,linux,x64}"
 RUNNER_WORKDIR="${RUNNER_WORKDIR:-_work}"
 
 #------------------------------------------------------------------------------
-# Logging
+# Logging (all logs go to stderr to avoid mixing with function return values)
 #------------------------------------------------------------------------------
 log() {
-    echo "[$(date -Iseconds)] $*"
+    echo "[$(date -Iseconds)] $*" >&2
 }
 
 log_error() {
@@ -202,9 +202,6 @@ main() {
         exit 1
     fi
     log "Runner token generated successfully (length: ${#RUNNER_TOKEN})"
-    log "DEBUG: Token first 10 chars: ${RUNNER_TOKEN:0:10}..."
-    log "DEBUG: hostname=$(hostname), testing github connectivity..."
-    curl -s -o /dev/null -w "DEBUG: github.com response code: %{http_code}\n" https://github.com/Matchpoint-AI || true
 
     # Configure runner
     log "Configuring runner..."
