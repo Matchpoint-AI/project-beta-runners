@@ -59,10 +59,17 @@ generate_jwt() {
     local payload="{\"iat\":${iat},\"exp\":${exp},\"iss\":\"${app_id}\"}"
     local payload_b64=$(echo -n "$payload" | openssl base64 -e | tr -d '\n=' | tr '+/' '-_')
 
+    # Write private key to temp file (avoids process substitution issues)
+    local keyfile=$(mktemp)
+    trap "rm -f $keyfile" EXIT
+    printf '%s\n' "$private_key" > "$keyfile"
+    chmod 600 "$keyfile"
+
     # Signature
     local unsigned="${header_b64}.${payload_b64}"
-    local signature=$(echo -n "$unsigned" | openssl dgst -sha256 -sign <(echo "$private_key") | openssl base64 -e | tr -d '\n=' | tr '+/' '-_')
+    local signature=$(echo -n "$unsigned" | openssl dgst -sha256 -sign "$keyfile" | openssl base64 -e | tr -d '\n=' | tr '+/' '-_')
 
+    rm -f "$keyfile"
     echo "${unsigned}.${signature}"
 }
 
