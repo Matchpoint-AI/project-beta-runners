@@ -201,7 +201,10 @@ main() {
         log_error "Failed to generate runner token"
         exit 1
     fi
-    log "Runner token generated successfully"
+    log "Runner token generated successfully (length: ${#RUNNER_TOKEN})"
+    log "DEBUG: Token first 10 chars: ${RUNNER_TOKEN:0:10}..."
+    log "DEBUG: hostname=$(hostname), testing github connectivity..."
+    curl -s -o /dev/null -w "DEBUG: github.com response code: %{http_code}\n" https://github.com/Matchpoint-AI || true
 
     # Configure runner
     log "Configuring runner..."
