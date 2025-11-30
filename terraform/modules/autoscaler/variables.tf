@@ -68,3 +68,47 @@ variable "webhook_secret_id" {
   description = "Secret Manager secret ID for webhook validation"
   type        = string
 }
+
+#------------------------------------------------------------------------------
+# GitHub App Credentials (for Polling)
+#------------------------------------------------------------------------------
+
+variable "github_app_id_secret_id" {
+  description = "Secret Manager secret ID for GitHub App ID"
+  type        = string
+  default     = ""
+}
+
+variable "github_app_installation_id_secret_id" {
+  description = "Secret Manager secret ID for GitHub App Installation ID"
+  type        = string
+  default     = ""
+}
+
+variable "github_app_private_key_secret_id" {
+  description = "Secret Manager secret ID for GitHub App Private Key"
+  type        = string
+  default     = ""
+}
+
+variable "github_org" {
+  description = "GitHub organization to poll for queued jobs"
+  type        = string
+  default     = "Matchpoint-AI"
+}
+
+#------------------------------------------------------------------------------
+# Polling Configuration
+#------------------------------------------------------------------------------
+
+variable "poll_enabled" {
+  description = "Enable background polling for stuck jobs"
+  type        = bool
+  default     = true
+}
+
+variable "poll_interval_seconds" {
+  description = "Interval between poll cycles in seconds"
+  type        = number
+  default     = 30
+}

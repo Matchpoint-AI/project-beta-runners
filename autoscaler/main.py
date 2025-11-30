@@ -6,19 +6,25 @@ to provide ephemeral self-hosted runners.
 
 Architecture:
   GitHub webhook (workflow_job.queued) -> This service -> Cloud Run Job execution
+  Background polling (fallback) -> Check for stuck jobs -> Cloud Run Job execution
 
 Each job execution handles exactly one workflow job, then terminates.
 
 Issue: https://github.com/Matchpoint-AI/project-beta-runners/issues/10
+Polling: https://github.com/Matchpoint-AI/project-beta-runners/issues/25
 """
 
 import os
-import json
 import hmac
 import hashlib
 import logging
+import threading
+import time
 from typing import Optional
+from datetime import datetime, timedelta
+from collections import deque
 
+import requests
 from flask import Flask, request, jsonify
 from google.cloud import run_v2
 
@@ -37,18 +43,27 @@ GCP_REGION = os.environ.get("GCP_REGION", "us-central1")
 RUNNER_JOB_NAME = os.environ.get("RUNNER_JOB_NAME", "github-runner")
 WEBHOOK_SECRET = os.environ.get("GITHUB_WEBHOOK_SECRET")
 RUNNER_LABELS = os.environ.get("RUNNER_LABELS", "self-hosted,cloud-run").split(",")
+GITHUB_ORG = os.environ.get("GITHUB_ORG", "Matchpoint-AI")
+
+# GitHub App credentials for API polling
+GITHUB_APP_ID = os.environ.get("GITHUB_APP_ID")
+GITHUB_APP_PRIVATE_KEY = os.environ.get("GITHUB_APP_PRIVATE_KEY")
+GITHUB_APP_INSTALLATION_ID = os.environ.get("GITHUB_APP_INSTALLATION_ID")
+
+# Polling configuration
+POLL_INTERVAL_SECONDS = int(os.environ.get("POLL_INTERVAL_SECONDS", "30"))
+POLL_ENABLED = os.environ.get("POLL_ENABLED", "true").lower() == "true"
+
+# Track recently triggered jobs to avoid duplicates (thread-safe deque)
+# Stores (job_id, timestamp) tuples
+RECENTLY_TRIGGERED = deque(maxlen=1000)
+RECENTLY_TRIGGERED_LOCK = threading.Lock()
+TRIGGER_COOLDOWN_SECONDS = 120  # Don't re-trigger same job within 2 minutes
 
 
 def verify_webhook_signature(payload: bytes, signature: str) -> bool:
     """
     Verify the GitHub webhook HMAC-SHA256 signature.
-
-    Args:
-        payload: Raw request body bytes
-        signature: X-Hub-Signature-256 header value
-
-    Returns:
-        True if signature is valid, False otherwise
     """
     if not WEBHOOK_SECRET:
         logger.warning("GITHUB_WEBHOOK_SECRET not configured - skipping signature verification")
@@ -71,29 +86,37 @@ def verify_webhook_signature(payload: bytes, signature: str) -> bool:
 def should_handle_job(labels: list[str]) -> bool:
     """
     Check if this autoscaler should handle a job based on labels.
-
-    Args:
-        labels: List of labels from the workflow job
-
-    Returns:
-        True if all configured runner labels are present in job labels
     """
     job_label_set = set(labels)
     required_labels = set(RUNNER_LABELS)
-
-    # Check if all required labels are present
     return required_labels.issubset(job_label_set)
+
+
+def was_recently_triggered(job_id: int) -> bool:
+    """
+    Check if a job was recently triggered to avoid duplicates.
+    """
+    now = datetime.now()
+    cutoff = now - timedelta(seconds=TRIGGER_COOLDOWN_SECONDS)
+
+    with RECENTLY_TRIGGERED_LOCK:
+        for triggered_job_id, triggered_time in RECENTLY_TRIGGERED:
+            if triggered_job_id == job_id and triggered_time > cutoff:
+                return True
+    return False
+
+
+def mark_as_triggered(job_id: int):
+    """
+    Mark a job as triggered to prevent duplicate triggers.
+    """
+    with RECENTLY_TRIGGERED_LOCK:
+        RECENTLY_TRIGGERED.append((job_id, datetime.now()))
 
 
 def execute_runner_job(run_id: str) -> Optional[str]:
     """
     Execute a Cloud Run Job to handle the workflow job.
-
-    Args:
-        run_id: Unique identifier for this run (used in job execution name)
-
-    Returns:
-        Execution name if successful, None otherwise
     """
     if not GCP_PROJECT_ID:
         logger.error("GCP_PROJECT_ID not configured")
@@ -101,16 +124,10 @@ def execute_runner_job(run_id: str) -> Optional[str]:
 
     try:
         client = run_v2.JobsClient()
-
-        # Construct the job resource name
         job_name = f"projects/{GCP_PROJECT_ID}/locations/{GCP_REGION}/jobs/{RUNNER_JOB_NAME}"
 
         logger.info(f"Executing job: {job_name}")
-
-        # Run the job
         operation = client.run_job(name=job_name)
-
-        # Get the execution resource
         execution = operation.result()
 
         logger.info(f"Job execution started: {execution.name}")
@@ -121,27 +138,212 @@ def execute_runner_job(run_id: str) -> Optional[str]:
         return None
 
 
+# =============================================================================
+# GitHub App Authentication for Polling
+# =============================================================================
+
+def generate_jwt() -> Optional[str]:
+    """
+    Generate a JWT for GitHub App authentication.
+    """
+    if not GITHUB_APP_ID or not GITHUB_APP_PRIVATE_KEY:
+        return None
+
+    try:
+        import jwt
+
+        now = int(time.time())
+        payload = {
+            "iat": now - 60,  # Issued 60 seconds ago (clock skew buffer)
+            "exp": now + 540,  # Expires in 9 minutes
+            "iss": GITHUB_APP_ID
+        }
+
+        return jwt.encode(payload, GITHUB_APP_PRIVATE_KEY, algorithm="RS256")
+    except ImportError:
+        logger.error("PyJWT not installed - polling disabled")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to generate JWT: {e}")
+        return None
+
+
+def get_installation_token() -> Optional[str]:
+    """
+    Get an installation access token for GitHub API calls.
+    """
+    jwt_token = generate_jwt()
+    if not jwt_token:
+        return None
+
+    if not GITHUB_APP_INSTALLATION_ID:
+        logger.error("GITHUB_APP_INSTALLATION_ID not configured")
+        return None
+
+    try:
+        response = requests.post(
+            f"https://api.github.com/app/installations/{GITHUB_APP_INSTALLATION_ID}/access_tokens",
+            headers={
+                "Authorization": f"Bearer {jwt_token}",
+                "Accept": "application/vnd.github+json"
+            },
+            timeout=10
+        )
+        response.raise_for_status()
+        return response.json().get("token")
+    except Exception as e:
+        logger.error(f"Failed to get installation token: {e}")
+        return None
+
+
+# =============================================================================
+# Polling for Queued Jobs
+# =============================================================================
+
+def get_queued_jobs_for_org(token: str) -> list[dict]:
+    """
+    Get all queued workflow jobs for the organization that match our labels.
+
+    Note: GitHub API doesn't have a direct "get queued jobs" endpoint.
+    We need to list workflow runs and their jobs.
+    """
+    queued_jobs = []
+
+    try:
+        # Get list of repos in the org (simplified - may need pagination for large orgs)
+        repos_response = requests.get(
+            f"https://api.github.com/orgs/{GITHUB_ORG}/repos",
+            headers={
+                "Authorization": f"token {token}",
+                "Accept": "application/vnd.github+json"
+            },
+            params={"per_page": 100, "type": "all"},
+            timeout=30
+        )
+        repos_response.raise_for_status()
+        repos = repos_response.json()
+
+        for repo in repos:
+            repo_name = repo["name"]
+
+            # Get queued workflow runs for this repo
+            runs_response = requests.get(
+                f"https://api.github.com/repos/{GITHUB_ORG}/{repo_name}/actions/runs",
+                headers={
+                    "Authorization": f"token {token}",
+                    "Accept": "application/vnd.github+json"
+                },
+                params={"status": "queued", "per_page": 20},
+                timeout=30
+            )
+
+            if runs_response.status_code != 200:
+                continue
+
+            runs = runs_response.json().get("workflow_runs", [])
+
+            for run in runs:
+                # Get jobs for this run
+                jobs_response = requests.get(
+                    f"https://api.github.com/repos/{GITHUB_ORG}/{repo_name}/actions/runs/{run['id']}/jobs",
+                    headers={
+                        "Authorization": f"token {token}",
+                        "Accept": "application/vnd.github+json"
+                    },
+                    timeout=30
+                )
+
+                if jobs_response.status_code != 200:
+                    continue
+
+                jobs = jobs_response.json().get("jobs", [])
+
+                for job in jobs:
+                    if job["status"] == "queued":
+                        labels = job.get("labels", [])
+                        if should_handle_job(labels):
+                            queued_jobs.append({
+                                "id": job["id"],
+                                "name": job["name"],
+                                "repo": repo_name,
+                                "labels": labels,
+                                "queued_at": job.get("started_at")
+                            })
+
+        return queued_jobs
+
+    except Exception as e:
+        logger.error(f"Failed to get queued jobs: {e}")
+        return []
+
+
+def poll_and_trigger():
+    """
+    Poll for queued jobs and trigger runners for any that need them.
+    """
+    logger.info("Polling for queued jobs...")
+
+    token = get_installation_token()
+    if not token:
+        logger.warning("Could not get GitHub token for polling")
+        return
+
+    queued_jobs = get_queued_jobs_for_org(token)
+    logger.info(f"Found {len(queued_jobs)} queued jobs matching our labels")
+
+    triggered_count = 0
+    for job in queued_jobs:
+        job_id = job["id"]
+
+        if was_recently_triggered(job_id):
+            logger.debug(f"Job {job_id} was recently triggered, skipping")
+            continue
+
+        logger.info(f"Triggering runner for stuck job: {job['name']} (id={job_id}, repo={job['repo']})")
+
+        execution_name = execute_runner_job(f"poll-{job_id}")
+        if execution_name:
+            mark_as_triggered(job_id)
+            triggered_count += 1
+
+    if triggered_count > 0:
+        logger.info(f"Triggered {triggered_count} runners for stuck jobs")
+
+
+def polling_loop():
+    """
+    Background polling loop that runs periodically.
+    """
+    logger.info(f"Starting polling loop (interval={POLL_INTERVAL_SECONDS}s)")
+
+    while True:
+        try:
+            poll_and_trigger()
+        except Exception as e:
+            logger.error(f"Error in polling loop: {e}")
+
+        time.sleep(POLL_INTERVAL_SECONDS)
+
+
+# =============================================================================
+# Webhook Handler
+# =============================================================================
+
 @app.route("/webhook", methods=["POST"])
 def handle_webhook():
     """
     Handle incoming GitHub webhook events.
-
-    Processes workflow_job events and triggers Cloud Run Job executions
-    when jobs are queued and match our runner labels.
     """
-    # Verify signature
     signature = request.headers.get("X-Hub-Signature-256", "")
     if not verify_webhook_signature(request.data, signature):
         logger.warning("Invalid webhook signature")
         return jsonify({"error": "Invalid signature"}), 401
 
-    # Get event type
     event_type = request.headers.get("X-GitHub-Event")
     delivery_id = request.headers.get("X-GitHub-Delivery", "unknown")
 
     logger.info(f"Received webhook: event={event_type}, delivery={delivery_id}")
 
-    # Only process workflow_job events
     if event_type != "workflow_job":
         logger.debug(f"Ignoring event type: {event_type}")
         return jsonify({
@@ -149,7 +351,6 @@ def handle_webhook():
             "reason": f"event type {event_type} not handled"
         })
 
-    # Parse payload
     try:
         payload = request.json
     except Exception as e:
@@ -164,7 +365,6 @@ def handle_webhook():
 
     logger.info(f"workflow_job event: action={action}, job_id={job_id}, name={job_name}, labels={labels}")
 
-    # Only process queued jobs
     if action != "queued":
         logger.debug(f"Ignoring action: {action}")
         return jsonify({
@@ -173,7 +373,6 @@ def handle_webhook():
             "job_id": job_id
         })
 
-    # Check if we should handle this job
     if not should_handle_job(labels):
         logger.info(f"Job labels {labels} do not match required labels {RUNNER_LABELS}")
         return jsonify({
@@ -184,11 +383,20 @@ def handle_webhook():
             "required_labels": RUNNER_LABELS
         })
 
-    # Execute a runner job
+    # Check if already triggered (e.g., by polling)
+    if was_recently_triggered(job_id):
+        logger.info(f"Job {job_id} was already triggered recently")
+        return jsonify({
+            "status": "skipped",
+            "reason": "already triggered",
+            "job_id": job_id
+        })
+
     run_id = f"{job_id}-{delivery_id[:8]}"
     execution_name = execute_runner_job(run_id)
 
     if execution_name:
+        mark_as_triggered(job_id)
         logger.info(f"Runner job execution started for workflow job {job_id}")
         return jsonify({
             "status": "processed",
@@ -214,9 +422,21 @@ def health():
             "project": GCP_PROJECT_ID,
             "region": GCP_REGION,
             "runner_job": RUNNER_JOB_NAME,
-            "labels": RUNNER_LABELS
+            "labels": RUNNER_LABELS,
+            "polling_enabled": POLL_ENABLED,
+            "poll_interval": POLL_INTERVAL_SECONDS
         }
     })
+
+
+@app.route("/poll", methods=["POST"])
+def manual_poll():
+    """
+    Manually trigger a poll for queued jobs.
+    Useful for testing or forcing an immediate check.
+    """
+    poll_and_trigger()
+    return jsonify({"status": "poll_completed"})
 
 
 @app.route("/", methods=["GET"])
@@ -227,12 +447,21 @@ def root():
         "description": "Webhook receiver for GitHub Actions self-hosted runners on Cloud Run",
         "endpoints": {
             "/webhook": "POST - GitHub webhook receiver",
-            "/health": "GET - Health check"
+            "/health": "GET - Health check",
+            "/poll": "POST - Manually trigger queue poll"
         }
     })
 
 
 if __name__ == "__main__":
+    # Start polling thread if enabled
+    if POLL_ENABLED and GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY:
+        polling_thread = threading.Thread(target=polling_loop, daemon=True)
+        polling_thread.start()
+        logger.info("Polling thread started")
+    else:
+        logger.warning("Polling disabled or GitHub App credentials not configured")
+
     port = int(os.environ.get("PORT", 8080))
     logger.info(f"Starting autoscaler on port {port}")
     app.run(host="0.0.0.0", port=port)
