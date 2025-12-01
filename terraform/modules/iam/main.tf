@@ -60,6 +60,14 @@ resource "google_project_iam_member" "runner_metric_writer" {
   member  = "serviceAccount:${google_service_account.runner.email}"
 }
 
+# Runner SA: Connect to Cloud SQL via Auth Proxy (for database migrations)
+# Issue: https://github.com/Matchpoint-AI/project-beta-runners/issues/42
+resource "google_project_iam_member" "runner_cloudsql_client" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.runner.email}"
+}
+
 #------------------------------------------------------------------------------
 # Autoscaler Service Account Permissions
 #------------------------------------------------------------------------------
