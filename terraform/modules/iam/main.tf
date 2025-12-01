@@ -114,6 +114,8 @@ locals {
     "roles/cloudbuild.builds.editor",        # Manage builds
     "roles/storage.admin",                   # Terraform state bucket
     "roles/resourcemanager.projectIamAdmin", # Manage IAM bindings
+    "roles/serviceusage.serviceUsageAdmin",  # Enable/disable GCP APIs
+    "roles/compute.admin",                   # Manage Compute Engine resources
   ]
 }
 
