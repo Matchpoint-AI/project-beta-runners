@@ -115,6 +115,7 @@ locals {
     "roles/storage.admin",                   # Terraform state bucket
     "roles/resourcemanager.projectIamAdmin", # Manage IAM bindings
     "roles/serviceusage.serviceUsageAdmin",  # Enable/disable GCP APIs
+    "roles/compute.admin",                   # Manage Compute Engine resources
   ]
 }
 
