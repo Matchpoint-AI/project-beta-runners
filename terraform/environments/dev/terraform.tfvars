@@ -1,7 +1,8 @@
 # Development environment variables
 
 project_id = "project-beta-dev"
-region     = "us-central1"
+# Issue #44: Moved to us-west1 for 100% carbon-free energy and to avoid quota congestion
+region     = "us-west1"
 
 # Runner resource allocation
 # Increased from 4Gi default to 8Gi to prevent OOM during npm ci
