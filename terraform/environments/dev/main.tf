@@ -97,32 +97,6 @@ module "artifact_registry" {
 }
 
 #------------------------------------------------------------------------------
-# Docker Host VM (for testcontainers support)
-#------------------------------------------------------------------------------
-
-# Issue #31: Docker-in-Docker support for Cloud Run runners
-# Cloud Run cannot run privileged containers, so we use a remote Docker daemon
-module "docker_host" {
-  source     = "../../modules/docker-host"
-  project_id = var.project_id
-
-  name         = "github-runner-docker-host"
-  zone         = "${var.region}-a"
-  machine_type = var.docker_host_machine_type
-
-  # Use runner service account for the Docker host
-  service_account_email = module.iam.runner_service_account_email
-
-  # Allow access from Cloud Run's VPC connector range
-  allowed_source_ranges = ["10.0.0.0/8"]
-
-  # Cost optimization for dev (can be disabled for prod)
-  preemptible = var.docker_host_preemptible
-
-  depends_on = [module.iam]
-}
-
-#------------------------------------------------------------------------------
 # Phase 2: Worker Pool (Cloud Run Job for Runners)
 #------------------------------------------------------------------------------
 
@@ -154,10 +128,7 @@ module "worker_pool" {
     private_key     = module.secrets.github_app_private_key_secret_id
   }
 
-  # Docker host for testcontainers (Issue #31)
-  docker_host_url = module.docker_host.docker_host_url
-
-  depends_on = [module.secrets, module.artifact_registry, module.docker_host]
+  depends_on = [module.secrets, module.artifact_registry]
 }
 
 #------------------------------------------------------------------------------
@@ -283,22 +254,6 @@ variable "poll_interval_seconds" {
 }
 
 #------------------------------------------------------------------------------
-# Docker Host Variables (Issue #31)
-#------------------------------------------------------------------------------
-
-variable "docker_host_machine_type" {
-  description = "Machine type for the Docker host VM"
-  type        = string
-  default     = "e2-standard-4"
-}
-
-variable "docker_host_preemptible" {
-  description = "Use preemptible VM for Docker host (cost savings, less stable)"
-  type        = bool
-  default     = true
-}
-
-#------------------------------------------------------------------------------
 # Outputs
 #------------------------------------------------------------------------------
 
@@ -378,21 +333,3 @@ output "webhook_url" {
   value       = module.autoscaler.webhook_url
 }
 
-#------------------------------------------------------------------------------
-# Docker Host Outputs (Issue #31)
-#------------------------------------------------------------------------------
-
-output "docker_host_url" {
-  description = "DOCKER_HOST URL for runners to connect to remote Docker daemon"
-  value       = module.docker_host.docker_host_url
-}
-
-output "docker_host_internal_ip" {
-  description = "Internal IP of the Docker host VM"
-  value       = module.docker_host.internal_ip
-}
-
-output "docker_host_instance_name" {
-  description = "Name of the Docker host VM instance"
-  value       = module.docker_host.instance_name
-}
