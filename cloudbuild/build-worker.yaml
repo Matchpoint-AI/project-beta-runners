@@ -22,7 +22,8 @@ steps:
       - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/github-runner'
 
 substitutions:
-  _REGION: 'us-central1'
+  # Issue #44: Moved to us-west1 for 100% carbon-free energy
+  _REGION: 'us-west1'
   _ARTIFACT_REPO: 'github-runners'
 
 images:
