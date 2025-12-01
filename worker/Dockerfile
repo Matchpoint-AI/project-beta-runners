@@ -138,6 +138,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 #------------------------------------------------------------------------------
+# PostgreSQL (for pytest-postgresql, Issue #39)
+# Install PostgreSQL server binaries so pytest-postgresql can start an
+# ephemeral database for testing without requiring Docker.
+# See: https://github.com/Matchpoint-AI/project-beta-runners/issues/39
+#------------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    postgresql \
+    postgresql-contrib \
+    && rm -rf /var/lib/apt/lists/* \
+    && pg_config --version
+
+#------------------------------------------------------------------------------
 # GitHub Actions Runner
 #------------------------------------------------------------------------------
 WORKDIR /home/runner
