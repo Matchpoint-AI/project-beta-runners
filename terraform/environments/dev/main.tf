@@ -180,7 +180,10 @@ variable "project_id" {
 variable "region" {
   description = "GCP Region for resources"
   type        = string
-  default     = "us-central1"
+  # Issue #44: Moved from us-central1 to us-west1 (Oregon)
+  # Reasons: 100% carbon-free energy, avoids us-central1 quota congestion,
+  # and provides good latency to GitHub (Seattle-based)
+  default     = "us-west1"
 }
 
 variable "github_org" {
