@@ -80,7 +80,10 @@ jobs:
         id: plan
         run: |
           terraform plan \
+            -input=false \
             -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
+            -var="runner_image=${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/github-runners/runner:latest" \
+            -var="autoscaler_image=${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/github-runners/autoscaler:latest" \
             -out=tfplan \
             -detailed-exitcode
         working-directory: ${{ steps.workdir.outputs.dir }}

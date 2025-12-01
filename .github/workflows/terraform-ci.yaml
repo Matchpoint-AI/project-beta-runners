@@ -117,7 +117,11 @@ jobs:
       - name: Terraform Plan
         id: plan
         run: |
-          terraform plan -no-color -var="project_id=${{ vars.GCP_PROJECT_ID }}" -out=tfplan 2>&1 | tee plan_output.txt
+          terraform plan -no-color -input=false \
+            -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
+            -var="runner_image=${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/github-runners/runner:latest" \
+            -var="autoscaler_image=${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/github-runners/autoscaler:latest" \
+            -out=tfplan 2>&1 | tee plan_output.txt
           echo "plan_output<<EOF" >> $GITHUB_OUTPUT
           cat plan_output.txt >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
