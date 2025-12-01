@@ -23,6 +23,11 @@ resource "google_cloud_run_v2_job" "runner" {
     task_count  = 1
 
     template {
+      # Use Gen2 execution environment for full syscall support
+      # Required for pytest-postgresql to run PostgreSQL binaries
+      # See: https://cloud.google.com/run/docs/container-contract
+      execution_environment = "EXECUTION_ENVIRONMENT_GEN2"
+
       containers {
         image = var.image
 
