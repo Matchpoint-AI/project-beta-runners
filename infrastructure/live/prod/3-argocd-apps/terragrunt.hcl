@@ -29,6 +29,7 @@ dependency "cloudspace" {
     cluster_token          = "mock-token"
   }
   mock_outputs_allowed_terraform_commands = ["validate", "plan"]
+  mock_outputs_merge_strategy_with_state  = "shallow"
 }
 
 # Dependency on Stage 2 - ArgoCD must be installed before we create Applications
@@ -39,6 +40,7 @@ dependency "cluster_base" {
     argocd_namespace = "argocd"
   }
   mock_outputs_allowed_terraform_commands = ["validate", "plan"]
+  mock_outputs_merge_strategy_with_state  = "shallow"
 }
 
 inputs = {
