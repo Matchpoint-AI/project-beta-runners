@@ -34,7 +34,7 @@ resource "spot_spotnodepool" "this" {
   bid_price       = 0.0 # On-demand pricing (no spot bidding)
 
   # Autoscaling configuration
-  autoscaling {
+  autoscaling = {
     min_nodes = var.min_nodes
     max_nodes = var.max_nodes
   }
