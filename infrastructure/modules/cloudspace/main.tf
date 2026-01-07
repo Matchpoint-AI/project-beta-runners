@@ -137,8 +137,16 @@ resource "terraform_data" "wait_for_cluster" {
           STATUS=$(echo "$STATUS_JSON" | jq -r '.status // "Unknown"')
           PHASE=$(echo "$STATUS_JSON" | jq -r '.phase // ""')
           
+          # Debug: show raw status on first iteration
+          if [ "$i" -eq 1 ]; then
+            echo "Raw status from API: $STATUS"
+            echo "Raw JSON: $STATUS_JSON" | head -c 500
+            echo ""
+          fi
+          
           case "$STATUS" in
-            "Ready"|"Running"|"Active")
+            # IMPORTANT: Rackspace API returns "Healthy" for ready clusters
+            "Healthy"|"Ready"|"Running"|"Active")
               echo ""
               echo "=============================================="
               echo "✅ CLOUDSPACE READY!"
@@ -176,7 +184,8 @@ resource "terraform_data" "wait_for_cluster" {
               exit 1
               ;;
             *)
-              printf "\r[%3d/%d] %-15s | Elapsed: %3dm" "$i" "$MAX_ATTEMPTS" "$STATUS" "$ELAPSED"
+              # Show unknown status for debugging
+              printf "\r[%3d/%d] %-15s | Elapsed: %3dm (unknown status)" "$i" "$MAX_ATTEMPTS" "$STATUS" "$ELAPSED"
               ;;
           esac
         else
