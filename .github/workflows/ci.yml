@@ -83,7 +83,9 @@ jobs:
           INFRA_GH_TOKEN: ${{ secrets.INFRA_GH_TOKEN }}
         run: |
           set +e
-          terragrunt run-all plan -no-color 2>&1 | tee plan.txt
+          # Skip argocd-apps during plan - kubernetes_manifest requires live cluster
+          terragrunt run-all plan -no-color \
+            --terragrunt-exclude-dir 3-argocd-apps 2>&1 | tee plan.txt
           exitcode=${PIPESTATUS[0]}
           echo "exitcode=$exitcode" >> $GITHUB_OUTPUT
           echo "output<<EOF" >> $GITHUB_OUTPUT
