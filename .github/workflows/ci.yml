@@ -103,6 +103,33 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
+      - name: Setup spotctl and fetch kubeconfig
+        env:
+          RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
+        run: |
+          # Install spotctl
+          curl -sL "https://github.com/rackspace-spot/spotctl/releases/download/v0.1.1/spotctl-linux-amd64" -o /tmp/spotctl
+          chmod +x /tmp/spotctl
+
+          # Configure spotctl
+          mkdir -p ~/.kube
+          printf 'org: "matchpoint-ai"\nrefreshToken: "%s"\nregion: "us-central-dfw-1"\n' "$RACKSPACE_SPOT_TOKEN" > ~/.spot_config
+          chmod 600 ~/.spot_config
+
+          # Fetch kubeconfig for the cloudspace
+          CLUSTER_NAME="matchpoint-runners"
+          if /tmp/spotctl cloudspaces get --name "$CLUSTER_NAME" --output json | grep -q '"status": "Ready"'; then
+            /tmp/spotctl cloudspaces get-config --name "$CLUSTER_NAME"
+            # Copy to module directory where terraform expects it
+            MODULE_DIR="infrastructure/modules/cloudspace"
+            if [ -f "$HOME/.kube/$CLUSTER_NAME.yaml" ]; then
+              cp "$HOME/.kube/$CLUSTER_NAME.yaml" "$MODULE_DIR/kubeconfig.yaml"
+              echo "✅ Kubeconfig fetched for $CLUSTER_NAME"
+            fi
+          else
+            echo "⚠️ Cloudspace not ready, skipping kubeconfig fetch"
+          fi
+
       - name: Terragrunt Plan
         id: plan
         working-directory: infrastructure/live/prod
@@ -113,12 +140,11 @@ jobs:
           INFRA_GH_TOKEN: ${{ secrets.INFRA_GH_TOKEN }}
         run: |
           set +e
-          # Skip stages that require local state or live cluster:
-          # - 1-cloudspace: data.local_file.kubeconfig requires local kubeconfig file
-          # - 2-cluster-base: depends on 1-cloudspace outputs
+          # Skip stages that require live cluster API:
+          # - 2-cluster-base: requires kubeconfig for helm/kubernetes providers
           # - 3-argocd-apps: kubernetes_manifest requires live cluster API
+          # Note: 1-cloudspace is now plannable since we fetch kubeconfig via spotctl
           terragrunt run-all plan -no-color \
-            --terragrunt-exclude-dir 1-cloudspace \
             --terragrunt-exclude-dir 2-cluster-base \
             --terragrunt-exclude-dir 3-argocd-apps 2>&1 | tee plan.txt
           exitcode=${PIPESTATUS[0]}
