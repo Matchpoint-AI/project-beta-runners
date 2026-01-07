@@ -1,7 +1,7 @@
 # Cloudspace Module
 #
 # Creates Rackspace Spot managed Kubernetes cluster and node pool.
-# Control plane provisioning takes 50-60 minutes.
+# Control plane provisioning typically takes 50-60 minutes, but can take up to 120 minutes.
 
 terraform {
   required_version = ">= 1.5.0"
@@ -74,17 +74,17 @@ resource "terraform_data" "wait_for_cluster" {
   provisioner "local-exec" {
     command = <<-EOT
       echo "Waiting for cloudspace ${var.cluster_name} to be ready..."
-      for i in $(seq 1 180); do
+      for i in $(seq 1 240); do
         # Check if kubeconfig is available (indicates cluster is ready)
         if curl -sf -H "Authorization: Bearer $RACKSPACE_SPOT_TOKEN" \
            "https://spot.rackspace.com/v1/cloudspaces/${var.cluster_name}/kubeconfig" > /dev/null 2>&1; then
           echo "Cloudspace ${var.cluster_name} is ready!"
           exit 0
         fi
-        echo "Attempt $i/180: Cluster still provisioning, waiting 30s..."
+        echo "Attempt $i/240: Cluster still provisioning, waiting 30s..."
         sleep 30
       done
-      echo "ERROR: Timed out waiting for cloudspace to be ready after 90 minutes"
+      echo "ERROR: Timed out waiting for cloudspace to be ready after 120 minutes"
       exit 1
     EOT
 

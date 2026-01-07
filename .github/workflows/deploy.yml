@@ -17,7 +17,7 @@ jobs:
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 150
     permissions:
       contents: read
       id-token: write
@@ -56,7 +56,7 @@ jobs:
           TF_IN_AUTOMATION: true
         run: |
           echo "Deploying infrastructure with automatic dependency ordering..."
-          echo "  Stage 1: Cloudspace (Kubernetes cluster) - 50-60 min for new"
+          echo "  Stage 1: Cloudspace (Kubernetes cluster) - 50-120 min for new"
           echo "  Stage 2: Cluster Base (ArgoCD) - 5-10 min"
           echo "  Stage 3: ArgoCD Apps (Runner deployment) - 1-2 min"
           echo ""
