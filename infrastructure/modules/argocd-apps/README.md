@@ -52,17 +52,15 @@ No modules.
 | [helm_release.arc_runners](https://registry.terraform.io/providers/hashicorp/helm/latest/docs/resources/release) | resource |
 | [kubernetes_namespace.arc_runners](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/namespace) | resource |
 | [kubernetes_namespace.arc_systems](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/namespace) | resource |
-| [kubernetes_secret.github_app](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/secret) | resource |
+| [kubernetes_secret.github_token](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/secret) | resource |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_arc_version"></a> [arc\_version](#input\_arc\_version) | ARC Helm chart version | `string` | `"0.9.3"` | no |
-| <a name="input_github_app_id"></a> [github\_app\_id](#input\_github\_app\_id) | GitHub App ID for runner registration | `string` | n/a | yes |
-| <a name="input_github_app_installation_id"></a> [github\_app\_installation\_id](#input\_github\_app\_installation\_id) | GitHub App Installation ID | `string` | n/a | yes |
-| <a name="input_github_app_private_key"></a> [github\_app\_private\_key](#input\_github\_app\_private\_key) | GitHub App private key (base64 encoded) | `string` | n/a | yes |
 | <a name="input_github_org"></a> [github\_org](#input\_github\_org) | GitHub organization for runner registration | `string` | `"Matchpoint-AI"` | no |
+| <a name="input_github_token"></a> [github\_token](#input\_github\_token) | GitHub PAT for runner registration (requires admin:org and manage\_runners:org scopes) | `string` | n/a | yes |
 | <a name="input_max_runners"></a> [max\_runners](#input\_max\_runners) | Maximum number of runners under load | `number` | `25` | no |
 | <a name="input_min_runners"></a> [min\_runners](#input\_min\_runners) | Minimum number of warm runners | `number` | `5` | no |
 | <a name="input_runner_label"></a> [runner\_label](#input\_runner\_label) | GitHub Actions runner label | `string` | `"project-beta-runners"` | no |
