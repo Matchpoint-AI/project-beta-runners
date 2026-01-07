@@ -57,4 +57,4 @@ jobs:
           echo "WARNING: Destroying cloudspace..."
           echo "This will delete the Kubernetes cluster and all resources in it."
           echo ""
-          terragrunt destroy -auto-approve
+          terragrunt destroy -auto-approve --terragrunt-non-interactive
