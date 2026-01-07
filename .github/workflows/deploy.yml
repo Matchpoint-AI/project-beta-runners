@@ -55,10 +55,11 @@ jobs:
         env:
           RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
           RACKSPACE_ORG: ${{ secrets.RACKSPACE_ORG }}
+          RACKSPACE_REGION: ${{ secrets.RACKSPACE_REGION }}
         run: |
-          printf 'org: "%s"\nrefreshToken: "%s"\nregion: "us-central-ord-1"\n' "$RACKSPACE_ORG" "$RACKSPACE_SPOT_TOKEN" > ~/.spot_config
+          printf 'org: "%s"\nrefreshToken: "%s"\nregion: "%s"\n' "$RACKSPACE_ORG" "$RACKSPACE_SPOT_TOKEN" "$RACKSPACE_REGION" > ~/.spot_config
           chmod 600 ~/.spot_config
-          echo "spotctl configured for org: $RACKSPACE_ORG"
+          echo "spotctl configured for org: $RACKSPACE_ORG region: $RACKSPACE_REGION"
 
       - name: Pre-flight cloudspace check
         id: preflight
