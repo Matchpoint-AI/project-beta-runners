@@ -14,6 +14,7 @@ env:
   TERRAGRUNT_VERSION: "0.54.0"
   SPOTCTL_VERSION: "0.1.1"
   CLOUDSPACE_NAME: "mp-runners-v3"
+  GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
 
 jobs:
   deploy:
@@ -70,7 +71,7 @@ jobs:
           echo "=== Pre-flight Cloudspace Check ==="
           
           # Check if cloudspace exists and its status
-          if spotctl cloudspaces get "${{ env.CLOUDSPACE_NAME }}" --output json > /tmp/cloudspace.json 2>&1; then
+          if spotctl cloudspaces get --name "${{ env.CLOUDSPACE_NAME }}" --output json > /tmp/cloudspace.json 2>&1; then
             STATUS=$(jq -r '.status // "Unknown"' /tmp/cloudspace.json)
             echo "cloudspace_exists=true" >> $GITHUB_OUTPUT
             echo "cloudspace_status=$STATUS" >> $GITHUB_OUTPUT
@@ -79,7 +80,7 @@ jobs:
             echo "Status: $STATUS"
             
             case "$STATUS" in
-              "Ready"|"Running")
+              "Ready"|"Running"|"Healthy")
                 echo "✅ Cloudspace is healthy"
                 ;;
               "Provisioning"|"Creating")
@@ -124,12 +125,28 @@ jobs:
           echo ""
           echo "Pre-flight status: ${{ steps.preflight.outputs.cloudspace_status }}"
           echo ""
-          terragrunt run-all apply -auto-approve --terragrunt-non-interactive
+          # Use -lock-timeout to wait for stale locks instead of failing immediately
+          terragrunt run-all apply -auto-approve --terragrunt-non-interactive -lock-timeout=5m
+
+      - name: Release state lock on cancel
+        if: cancelled()
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        run: |
+          echo "Workflow cancelled - releasing any state locks..."
+          for stage in 1-cloudspace 2-cluster-base 3-argocd-apps; do
+            LOCK_PATH="gs://${GCS_BUCKET}/runners/prod/${stage}/default.tflock"
+            if gcloud storage ls "${LOCK_PATH}" 2>/dev/null; then
+              echo "Releasing lock for ${stage}..."
+              gcloud storage rm "${LOCK_PATH}" || true
+            fi
+          done
+          echo "Lock cleanup complete"
 
       - name: Post-deploy cloudspace status
         if: always()
         run: |
           echo "=== Post-Deploy Cloudspace Status ==="
-          spotctl cloudspaces get "${{ env.CLOUDSPACE_NAME }}" --output json | jq '.' || echo "Could not fetch status"
+          spotctl cloudspaces get --name "${{ env.CLOUDSPACE_NAME }}" --output json | jq '.' || echo "Could not fetch status"
 
   # Note: verify-runners.yml triggers automatically via workflow_run
