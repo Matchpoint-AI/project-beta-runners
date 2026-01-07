@@ -7,6 +7,7 @@ on:
       - 'infrastructure/**'
       - 'argocd/**'
       - '.github/workflows/deploy.yml'
+  workflow_dispatch:  # Allow manual triggers
 
 env:
   OPENTOFU_VERSION: "1.8.0"
