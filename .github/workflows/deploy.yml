@@ -7,7 +7,7 @@ on:
       - 'infrastructure/**'
       - 'argocd/**'
       - '.github/workflows/deploy.yml'
-  workflow_dispatch:  # Allow manual triggers
+  workflow_dispatch:
 
 env:
   OPENTOFU_VERSION: "1.8.0"
@@ -56,45 +56,25 @@ jobs:
           RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
           RACKSPACE_ORG: ${{ secrets.RACKSPACE_ORG }}
         run: |
-          cat > ~/.spot_config << EOF
-org: "${RACKSPACE_ORG}"
-refreshToken: "${RACKSPACE_SPOT_TOKEN}"
-region: "us-central-ord-1"
-EOF
+          printf 'org: "%s"\nrefreshToken: "%s"\nregion: "us-central-ord-1"\n' "$RACKSPACE_ORG" "$RACKSPACE_SPOT_TOKEN" > ~/.spot_config
           chmod 600 ~/.spot_config
-          echo "spotctl configured for org: ${RACKSPACE_ORG}"
+          echo "spotctl configured for org: $RACKSPACE_ORG"
 
       - name: Pre-flight cloudspace check
         id: preflight
         run: |
           echo "=== Pre-flight Cloudspace Check ==="
-          
-          # Check if cloudspace exists and its status
           if spotctl cloudspaces get --name "${{ env.CLOUDSPACE_NAME }}" --output json > /tmp/cloudspace.json 2>&1; then
             STATUS=$(jq -r '.status // "Unknown"' /tmp/cloudspace.json)
             echo "cloudspace_exists=true" >> $GITHUB_OUTPUT
             echo "cloudspace_status=$STATUS" >> $GITHUB_OUTPUT
-            
             echo "Cloudspace: ${{ env.CLOUDSPACE_NAME }}"
             echo "Status: $STATUS"
-            
             case "$STATUS" in
-              "Ready"|"Running"|"Healthy")
-                echo "✅ Cloudspace is healthy"
-                ;;
-              "Provisioning"|"Creating")
-                echo "::warning::Cloudspace is still provisioning - this deploy may take longer"
-                echo "   The cluster was started in a previous run and is still coming up."
-                ;;
-              "Failed"|"Error")
-                echo "::error::Cloudspace is in $STATUS state!"
-                echo "   Consider running: spotctl cloudspaces delete --name ${{ env.CLOUDSPACE_NAME }}"
-                echo "   Then re-trigger this workflow."
-                # Don't fail - let terragrunt handle it
-                ;;
-              *)
-                echo "::notice::Unknown status: $STATUS"
-                ;;
+              "Ready"|"Running"|"Healthy") echo "✅ Cloudspace is healthy" ;;
+              "Provisioning"|"Creating") echo "::warning::Cloudspace is still provisioning" ;;
+              "Failed"|"Error") echo "::error::Cloudspace is in $STATUS state!" ;;
+              *) echo "::notice::Unknown status: $STATUS" ;;
             esac
           else
             echo "cloudspace_exists=false" >> $GITHUB_OUTPUT
@@ -117,14 +97,8 @@ EOF
           INFRA_GH_TOKEN: ${{ secrets.INFRA_GH_TOKEN }}
           TF_IN_AUTOMATION: true
         run: |
-          echo "Deploying infrastructure with automatic dependency ordering..."
-          echo "  Stage 1: Cloudspace (Kubernetes cluster) - 50-120 min for new"
-          echo "  Stage 2: Cluster Base (ArgoCD) - 5-10 min"
-          echo "  Stage 3: ArgoCD Apps (Runner deployment) - 1-2 min"
-          echo ""
+          echo "Deploying infrastructure..."
           echo "Pre-flight status: ${{ steps.preflight.outputs.cloudspace_status }}"
-          echo ""
-          # Use -lock-timeout to wait for stale locks instead of failing immediately
           terragrunt run-all apply -auto-approve --terragrunt-non-interactive -lock-timeout=5m
 
       - name: Release OUR state locks on cancel
@@ -134,31 +108,21 @@ EOF
         run: |
           echo "Workflow cancelled - checking for locks held by THIS workflow..."
           CURRENT_RUNNER=$(hostname)
-          
           for stage in 1-cloudspace 2-cluster-base 3-argocd-apps; do
             LOCK_PATH="gs://${GCS_BUCKET}/runners/prod/${stage}/default.tflock"
-            
-            # Check if lock exists and who holds it
             if gcloud storage cat "${LOCK_PATH}" > /tmp/lockinfo.json 2>/dev/null; then
               LOCK_HOLDER=$(jq -r '.Who // "unknown"' /tmp/lockinfo.json 2>/dev/null || echo "unknown")
-              
-              # Only release if WE hold the lock (runner hostname matches)
               if [[ "$LOCK_HOLDER" == *"$CURRENT_RUNNER"* ]]; then
-                echo "✅ Releasing OUR lock for ${stage} (held by: $LOCK_HOLDER)"
+                echo "✅ Releasing OUR lock for ${stage}"
                 gcloud storage rm "${LOCK_PATH}" || true
               else
-                echo "⚠️  Lock for ${stage} held by different runner: $LOCK_HOLDER - NOT releasing"
+                echo "⚠️  Lock for ${stage} held by different runner - NOT releasing"
               fi
-            else
-              echo "   No lock found for ${stage}"
             fi
           done
-          echo "Lock cleanup complete"
 
       - name: Post-deploy cloudspace status
         if: always()
         run: |
           echo "=== Post-Deploy Cloudspace Status ==="
           spotctl cloudspaces get --name "${{ env.CLOUDSPACE_NAME }}" --output json | jq '.' || echo "Could not fetch status"
-
-  # Note: verify-runners.yml triggers automatically via workflow_run
