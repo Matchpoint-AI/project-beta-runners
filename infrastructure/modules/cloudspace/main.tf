@@ -158,49 +158,24 @@ resource "terraform_data" "wait_for_cluster" {
 }
 
 # -----------------------------------------------------------------------------
-# Kubeconfig Fetch
+# Kubeconfig Fetch (External Data Source)
 # -----------------------------------------------------------------------------
-# Fetches kubeconfig via spotctl and copies to module directory.
-# Note: spotctl always writes to ~/.kube/<cluster>.yaml regardless of --file flag
+# Uses external data source to fetch kubeconfig via spotctl.
+# This runs during both plan and apply phases, solving the chicken-and-egg
+# problem where data.local_file would fail during plan.
 
-resource "terraform_data" "fetch_kubeconfig" {
-  # triggers_replace forces re-creation when upstream resource changes
-  triggers_replace = [terraform_data.wait_for_cluster.id]
+data "external" "kubeconfig" {
+  program = ["bash", "${path.module}/scripts/fetch-kubeconfig.sh"]
 
-  provisioner "local-exec" {
-    command = <<-EOT
-      set -e
-      CLUSTER_NAME="${var.cluster_name}"
-      SRC_PATH="$HOME/.kube/$CLUSTER_NAME.yaml"
-      DEST_PATH="${path.module}/kubeconfig.yaml"
-      SPOTCTL=$(command -v spotctl || echo "/tmp/spotctl")
-      
-      mkdir -p ~/.kube
-      echo "Fetching kubeconfig for $CLUSTER_NAME..."
-      $SPOTCTL cloudspaces get-config --name "$CLUSTER_NAME"
-      
-      if [ -s "$SRC_PATH" ]; then
-        cp "$SRC_PATH" "$DEST_PATH"
-        echo "✅ Kubeconfig copied to $DEST_PATH"
-      else
-        echo "❌ Failed to fetch kubeconfig"
-        exit 1
-      fi
-    EOT
+  query = {
+    cluster_name = var.cluster_name
   }
 
   depends_on = [terraform_data.wait_for_cluster]
 }
 
-# -----------------------------------------------------------------------------
-# Kubeconfig Output
-# -----------------------------------------------------------------------------
-
-data "local_file" "kubeconfig" {
-  filename   = "${path.module}/kubeconfig.yaml"
-  depends_on = [terraform_data.fetch_kubeconfig]
-}
-
 locals {
-  kubeconfig = yamldecode(data.local_file.kubeconfig.content)
+  # Decode the base64-encoded kubeconfig from the external data source
+  kubeconfig_raw = data.external.kubeconfig.result.kubeconfig != "" ? base64decode(data.external.kubeconfig.result.kubeconfig) : ""
+  kubeconfig     = local.kubeconfig_raw != "" ? yamldecode(local.kubeconfig_raw) : {}
 }

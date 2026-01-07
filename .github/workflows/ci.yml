@@ -103,11 +103,11 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      - name: Setup spotctl and fetch kubeconfig
+      - name: Setup spotctl
         env:
           RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
         run: |
-          # Install spotctl
+          # Install spotctl (used by terraform external data source)
           curl -sL "https://github.com/rackspace-spot/spotctl/releases/download/v0.1.1/spotctl-linux-amd64" -o /tmp/spotctl
           chmod +x /tmp/spotctl
 
@@ -115,20 +115,6 @@ jobs:
           mkdir -p ~/.kube
           printf 'org: "matchpoint-ai"\nrefreshToken: "%s"\nregion: "us-central-dfw-1"\n' "$RACKSPACE_SPOT_TOKEN" > ~/.spot_config
           chmod 600 ~/.spot_config
-
-          # Fetch kubeconfig for the cloudspace
-          CLUSTER_NAME="matchpoint-runners"
-          if /tmp/spotctl cloudspaces get --name "$CLUSTER_NAME" --output json | grep -q '"status": "Ready"'; then
-            /tmp/spotctl cloudspaces get-config --name "$CLUSTER_NAME"
-            # Copy to module directory where terraform expects it
-            MODULE_DIR="infrastructure/modules/cloudspace"
-            if [ -f "$HOME/.kube/$CLUSTER_NAME.yaml" ]; then
-              cp "$HOME/.kube/$CLUSTER_NAME.yaml" "$MODULE_DIR/kubeconfig.yaml"
-              echo "✅ Kubeconfig fetched for $CLUSTER_NAME"
-            fi
-          else
-            echo "⚠️ Cloudspace not ready, skipping kubeconfig fetch"
-          fi
 
       - name: Terragrunt Plan
         id: plan
