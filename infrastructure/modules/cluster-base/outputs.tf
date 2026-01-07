@@ -1,14 +1,8 @@
 # Cluster Base Module - Outputs
 
-output "kubeconfig_raw" {
-  description = "Raw kubeconfig YAML for the cluster"
-  value       = data.spot_kubeconfig.this.raw
-  sensitive   = true
-}
-
 output "cluster_endpoint" {
   description = "Kubernetes API server endpoint"
-  value       = local.kubeconfig["clusters"][0]["cluster"]["server"]
+  value       = var.cluster_endpoint
 }
 
 output "argocd_namespace" {

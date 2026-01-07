@@ -1,8 +1,20 @@
 # Cluster Base Module - Input Variables
 
-variable "cloudspace_name" {
-  description = "Name of the Kubernetes cluster"
+variable "cluster_endpoint" {
+  description = "Kubernetes API server endpoint"
   type        = string
+}
+
+variable "cluster_ca_certificate" {
+  description = "Base64-encoded cluster CA certificate"
+  type        = string
+  sensitive   = true
+}
+
+variable "cluster_token" {
+  description = "Authentication token for the cluster"
+  type        = string
+  sensitive   = true
 }
 
 variable "argocd_chart_version" {

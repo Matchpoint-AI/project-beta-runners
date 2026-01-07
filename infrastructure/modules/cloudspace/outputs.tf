@@ -27,3 +27,27 @@ output "node_scaling" {
     max = var.max_nodes
   }
 }
+
+# Kubeconfig outputs for downstream modules
+output "kubeconfig_raw" {
+  description = "Raw kubeconfig YAML"
+  value       = data.spot_kubeconfig.this.raw
+  sensitive   = true
+}
+
+output "cluster_endpoint" {
+  description = "Kubernetes API server endpoint"
+  value       = local.kubeconfig["clusters"][0]["cluster"]["server"]
+}
+
+output "cluster_ca_certificate" {
+  description = "Base64-encoded cluster CA certificate"
+  value       = local.kubeconfig["clusters"][0]["cluster"]["certificate-authority-data"]
+  sensitive   = true
+}
+
+output "cluster_token" {
+  description = "Authentication token for the cluster"
+  value       = local.kubeconfig["users"][0]["user"]["token"]
+  sensitive   = true
+}

@@ -17,19 +17,36 @@ terraform {
   source = "${get_parent_terragrunt_dir()}/../modules/argocd-apps"
 }
 
-# Dependency on Stage 2 - ArgoCD must be installed
+# Dependency on Stage 1 - need kubeconfig to talk to cluster
+dependency "cloudspace" {
+  config_path = "../1-cloudspace"
+
+  mock_outputs = {
+    cloudspace_name        = "mock-cluster"
+    region                 = "us-central-dfw-1"
+    cluster_endpoint       = "https://mock-endpoint.example.com"
+    cluster_ca_certificate = "bW9jay1jYS1jZXJ0"
+    cluster_token          = "mock-token"
+  }
+  mock_outputs_allowed_terraform_commands = ["validate", "plan"]
+}
+
+# Dependency on Stage 2 - ArgoCD must be installed before we create Applications
 dependency "cluster_base" {
   config_path = "../2-cluster-base"
 
   mock_outputs = {
-    kubeconfig_raw   = "mock"
-    cluster_endpoint = "https://mock:6443"
     argocd_namespace = "argocd"
   }
   mock_outputs_allowed_terraform_commands = ["validate", "plan"]
 }
 
 inputs = {
+  # Kubeconfig from cloudspace
+  cluster_endpoint       = dependency.cloudspace.outputs.cluster_endpoint
+  cluster_ca_certificate = dependency.cloudspace.outputs.cluster_ca_certificate
+  cluster_token          = dependency.cloudspace.outputs.cluster_token
+
   # GitHub PAT for runner registration
   github_token = get_env("INFRA_GH_TOKEN", "")
 

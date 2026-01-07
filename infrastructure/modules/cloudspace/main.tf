@@ -41,3 +41,16 @@ resource "spot_spotnodepool" "this" {
 
   depends_on = [spot_cloudspace.this]
 }
+
+# -----------------------------------------------------------------------------
+# Kubeconfig Data Source
+# -----------------------------------------------------------------------------
+data "spot_kubeconfig" "this" {
+  cloudspace_name = spot_cloudspace.this.cloudspace_name
+
+  depends_on = [spot_spotnodepool.this]
+}
+
+locals {
+  kubeconfig = yamldecode(data.spot_kubeconfig.this.raw)
+}

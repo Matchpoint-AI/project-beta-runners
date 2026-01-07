@@ -1,15 +1,11 @@
 # Cluster Base Module
 #
-# Fetches kubeconfig and installs ArgoCD on the cluster.
+# Installs ArgoCD on the cluster using kubeconfig from cloudspace module.
 
 terraform {
   required_version = ">= 1.5.0"
 
   required_providers {
-    spot = {
-      source  = "rackerlabs/spot"
-      version = ">= 0.1.0"
-    }
     kubernetes = {
       source  = "hashicorp/kubernetes"
       version = ">= 2.23.0"
@@ -22,30 +18,19 @@ terraform {
 }
 
 # -----------------------------------------------------------------------------
-# Kubeconfig Data Source
-# -----------------------------------------------------------------------------
-data "spot_kubeconfig" "this" {
-  cloudspace_name = var.cloudspace_name
-}
-
-locals {
-  kubeconfig = yamldecode(data.spot_kubeconfig.this.raw)
-}
-
-# -----------------------------------------------------------------------------
 # Kubernetes Provider Configuration
 # -----------------------------------------------------------------------------
 provider "kubernetes" {
-  host                   = local.kubeconfig["clusters"][0]["cluster"]["server"]
-  cluster_ca_certificate = base64decode(local.kubeconfig["clusters"][0]["cluster"]["certificate-authority-data"])
-  token                  = local.kubeconfig["users"][0]["user"]["token"]
+  host                   = var.cluster_endpoint
+  cluster_ca_certificate = base64decode(var.cluster_ca_certificate)
+  token                  = var.cluster_token
 }
 
 provider "helm" {
   kubernetes = {
-    host                   = local.kubeconfig["clusters"][0]["cluster"]["server"]
-    cluster_ca_certificate = base64decode(local.kubeconfig["clusters"][0]["cluster"]["certificate-authority-data"])
-    token                  = local.kubeconfig["users"][0]["user"]["token"]
+    host                   = var.cluster_endpoint
+    cluster_ca_certificate = base64decode(var.cluster_ca_certificate)
+    token                  = var.cluster_token
   }
 }
 
