@@ -27,3 +27,14 @@ variable "max_nodes" {
   type        = number
   default     = 15
 }
+
+variable "bid_price" {
+  description = "Bid price per node per hour in USD (must be > 0 and < 1)"
+  type        = number
+  default     = 0.28
+
+  validation {
+    condition     = var.bid_price > 0 && var.bid_price < 1
+    error_message = "Bid price must be between 0 and 1 (exclusive)."
+  }
+}

@@ -31,7 +31,7 @@ resource "spot_cloudspace" "this" {
 resource "spot_spotnodepool" "this" {
   cloudspace_name = spot_cloudspace.this.cloudspace_name
   server_class    = var.server_class
-  bid_price       = 0.0 # On-demand pricing (no spot bidding)
+  bid_price       = var.bid_price
 
   # Autoscaling configuration
   autoscaling = {
