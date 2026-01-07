@@ -5,106 +5,41 @@ on:
     branches: [main]
 
 env:
-  TERRAFORM_VERSION: "1.5.7"
+  OPENTOFU_VERSION: "1.8.0"
   TERRAGRUNT_VERSION: "0.54.0"
 
 jobs:
-  detect-changes:
-    name: Detect Changes
+  ci:
+    name: CI
     runs-on: ubuntu-latest
-    outputs:
-      terraform_changed: ${{ steps.changes.outputs.terraform_any_changed }}
-      ci_changed: ${{ steps.changes.outputs.ci_any_changed }}
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Detect changed files
-        uses: tj-actions/changed-files@v44
-        id: changes
+      - uses: opentofu/setup-opentofu@v1
         with:
-          files_yaml: |
-            terraform:
-              - 'infrastructure/**/*.tf'
-              - 'infrastructure/**/*.hcl'
-            ci:
-              - '.github/workflows/**'
+          tofu_version: ${{ env.OPENTOFU_VERSION }}
+          tofu_wrapper: false
 
-      - name: Print results
+      - name: Setup Terragrunt
         run: |
-          echo "Terraform changed: ${{ steps.changes.outputs.terraform_any_changed }}"
-          echo "CI changed: ${{ steps.changes.outputs.ci_any_changed }}"
-
-  format:
-    name: Terraform Format
-    runs-on: ubuntu-latest
-    needs: detect-changes
-    if: needs.detect-changes.outputs.terraform_changed == 'true' || needs.detect-changes.outputs.ci_changed == 'true'
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-          terraform_wrapper: false
+          wget -q https://github.com/gruntwork-io/terragrunt/releases/download/v${{ env.TERRAGRUNT_VERSION }}/terragrunt_linux_amd64
+          chmod +x terragrunt_linux_amd64
+          sudo mv terragrunt_linux_amd64 /usr/local/bin/terragrunt
 
       - name: Check formatting
         run: |
-          echo "Checking Terraform formatting..."
-          if ! terraform fmt -check -recursive infrastructure/; then
-            echo "Terraform files need formatting"
-            echo "Run: terraform fmt -recursive infrastructure/"
+          echo "Checking formatting..."
+          if ! tofu fmt -check -recursive infrastructure/; then
+            echo "Files need formatting. Run: tofu fmt -recursive infrastructure/"
             exit 1
           fi
-          echo "All Terraform files properly formatted"
-
-  validate:
-    name: Terraform Validate
-    runs-on: ubuntu-latest
-    needs: detect-changes
-    if: needs.detect-changes.outputs.terraform_changed == 'true' || needs.detect-changes.outputs.ci_changed == 'true'
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-          terraform_wrapper: false
-
-      - name: Validate modules
-        run: |
-          echo "Validating Terraform modules..."
-          # Skip modules with custom providers not in public registry
-          # cloudspace and cluster-base both use rackerlabs/rackspace-spot
-          SKIP_MODULES="cloudspace cluster-base"
-
-          for module in infrastructure/modules/*/; do
-            if [ -d "$module" ]; then
-              module_name=$(basename "$module")
-
-              # Check if module should be skipped
-              if echo "$SKIP_MODULES" | grep -qw "$module_name"; then
-                echo "Skipping $module_name (uses custom provider)"
-                continue
-              fi
-
-              echo "Validating: $module"
-              cd "$module"
-              terraform init -backend=false
-              terraform validate
-              cd - > /dev/null
-            fi
-          done
-          echo "All modules valid"
-
-  docs:
-    name: Terraform Docs
-    runs-on: ubuntu-latest
-    needs: detect-changes
-    if: needs.detect-changes.outputs.terraform_changed == 'true' || needs.detect-changes.outputs.ci_changed == 'true'
-    steps:
-      - uses: actions/checkout@v4
 
       - name: Install terraform-docs
         run: |
@@ -115,7 +50,6 @@ jobs:
 
       - name: Check documentation
         run: |
-          echo "Checking Terraform documentation..."
           failed=false
           for module in infrastructure/modules/*/; do
             if [ -d "$module" ] && ls "$module"/*.tf 1> /dev/null 2>&1; then
@@ -133,32 +67,8 @@ jobs:
             echo "Run: terraform-docs markdown table --output-file README.md --output-mode inject <module>"
             exit 1
           fi
-          echo "All module documentation up-to-date"
 
-  plan:
-    name: Terragrunt Plan
-    runs-on: ubuntu-latest
-    needs: [format, validate, docs]
-    permissions:
-      contents: read
-      id-token: write
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-          terraform_wrapper: false
-
-      - name: Setup Terragrunt
-        run: |
-          wget -q https://github.com/gruntwork-io/terragrunt/releases/download/v${{ env.TERRAGRUNT_VERSION }}/terragrunt_linux_amd64
-          chmod +x terragrunt_linux_amd64
-          sudo mv terragrunt_linux_amd64 /usr/local/bin/terragrunt
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+      - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
@@ -173,11 +83,7 @@ jobs:
           INFRA_GH_TOKEN: ${{ secrets.INFRA_GH_TOKEN }}
         run: |
           set +e
-          # Skip modules with custom providers (rackerlabs/rackspace-spot not in public registry)
-          terragrunt run-all plan -no-color \
-            --terragrunt-exclude-dir "*/1-cloudspace" \
-            --terragrunt-exclude-dir "*/2-cluster-base" \
-            2>&1 | tee plan.txt
+          terragrunt run-all plan -no-color 2>&1 | tee plan.txt
           exitcode=${PIPESTATUS[0]}
           echo "exitcode=$exitcode" >> $GITHUB_OUTPUT
           echo "output<<EOF" >> $GITHUB_OUTPUT
