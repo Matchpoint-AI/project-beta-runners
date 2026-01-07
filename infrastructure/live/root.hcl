@@ -31,19 +31,16 @@ remote_state {
   }
 }
 
-# Generate provider configuration
-generate "provider" {
-  path      = "provider.tf"
+# Generate common variables (provider config handled per-module)
+generate "variables" {
+  path      = "common_variables.tf"
   if_exists = "overwrite_terragrunt"
   contents  = <<EOF
-provider "spot" {
-  token = var.rackspace_spot_token
-}
-
 variable "rackspace_spot_token" {
   description = "Rackspace Spot API token"
   type        = string
   sensitive   = true
+  default     = ""
 }
 EOF
 }

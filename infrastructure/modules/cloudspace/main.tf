@@ -15,6 +15,19 @@ terraform {
 }
 
 # -----------------------------------------------------------------------------
+# Spot Provider Configuration
+# -----------------------------------------------------------------------------
+provider "spot" {
+  token = var.rackspace_spot_token
+}
+
+variable "rackspace_spot_token" {
+  description = "Rackspace Spot API token"
+  type        = string
+  sensitive   = true
+}
+
+# -----------------------------------------------------------------------------
 # Cloudspace (Kubernetes Cluster)
 # -----------------------------------------------------------------------------
 resource "spot_cloudspace" "this" {
