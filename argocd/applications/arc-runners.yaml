@@ -33,6 +33,22 @@ spec:
         # Runner pod template with DinD sidecar for Docker support
         template:
           spec:
+            initContainers:
+              - name: wait-for-docker
+                image: docker:24-cli
+                command:
+                  - sh
+                  - -c
+                  - |
+                    echo "Waiting for Docker daemon..."
+                    until docker info >/dev/null 2>&1; do
+                      echo "Docker not ready, waiting..."
+                      sleep 1
+                    done
+                    echo "Docker is ready!"
+                env:
+                  - name: DOCKER_HOST
+                    value: tcp://localhost:2375
             containers:
               - name: runner
                 image: ghcr.io/actions/actions-runner:latest
