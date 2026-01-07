@@ -51,13 +51,13 @@ jobs:
 
       - name: Check formatting
         run: |
-          echo "🔍 Checking Terraform formatting..."
+          echo "Checking Terraform formatting..."
           if ! terraform fmt -check -recursive infrastructure/; then
-            echo "❌ Terraform files need formatting"
-            echo "💡 Run: terraform fmt -recursive infrastructure/"
+            echo "Terraform files need formatting"
+            echo "Run: terraform fmt -recursive infrastructure/"
             exit 1
           fi
-          echo "✅ All Terraform files properly formatted"
+          echo "All Terraform files properly formatted"
 
   validate:
     name: Terraform Validate
@@ -74,7 +74,7 @@ jobs:
 
       - name: Validate modules
         run: |
-          echo "🔍 Validating Terraform modules..."
+          echo "Validating Terraform modules..."
           # Skip modules with custom providers not in public registry
           # cloudspace and cluster-base both use rackerlabs/rackspace-spot
           SKIP_MODULES="cloudspace cluster-base"
@@ -85,7 +85,7 @@ jobs:
 
               # Check if module should be skipped
               if echo "$SKIP_MODULES" | grep -qw "$module_name"; then
-                echo "⏭️ Skipping $module_name (uses custom provider)"
+                echo "Skipping $module_name (uses custom provider)"
                 continue
               fi
 
@@ -96,7 +96,7 @@ jobs:
               cd - > /dev/null
             fi
           done
-          echo "✅ All modules valid"
+          echo "All modules valid"
 
   docs:
     name: Terraform Docs
@@ -115,25 +115,25 @@ jobs:
 
       - name: Check documentation
         run: |
-          echo "🔍 Checking Terraform documentation..."
+          echo "Checking Terraform documentation..."
           failed=false
           for module in infrastructure/modules/*/; do
             if [ -d "$module" ] && ls "$module"/*.tf 1> /dev/null 2>&1; then
               module_name=$(basename "$module")
               if [ ! -f "$module/README.md" ]; then
-                echo "❌ Missing README.md: $module_name"
+                echo "Missing README.md: $module_name"
                 failed=true
               elif ! terraform-docs markdown table --output-check "$module"; then
-                echo "❌ Docs outdated: $module_name"
+                echo "Docs outdated: $module_name"
                 failed=true
               fi
             fi
           done
           if [ "$failed" = true ]; then
-            echo "💡 Run: terraform-docs markdown table --output-file README.md --output-mode inject <module>"
+            echo "Run: terraform-docs markdown table --output-file README.md --output-mode inject <module>"
             exit 1
           fi
-          echo "✅ All module documentation up-to-date"
+          echo "All module documentation up-to-date"
 
   plan:
     name: Terragrunt Plan
@@ -157,7 +157,8 @@ jobs:
           chmod +x terragrunt_linux_amd64
           sudo mv terragrunt_linux_amd64 /usr/local/bin/terragrunt
 
-      - uses: google-github-actions/auth@v2
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
@@ -169,9 +170,7 @@ jobs:
           GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
-          ARC_GITHUB_APP_ID: ${{ secrets.ARC_GITHUB_APP_ID }}
-          ARC_GITHUB_APP_INSTALLATION_ID: ${{ secrets.ARC_GITHUB_APP_INSTALLATION_ID }}
-          ARC_GITHUB_APP_PRIVATE_KEY: ${{ secrets.ARC_GITHUB_APP_PRIVATE_KEY }}
+          INFRA_GH_TOKEN: ${{ secrets.INFRA_GH_TOKEN }}
         run: |
           terragrunt run-all plan -no-color 2>&1 | tee plan.txt
           echo "output<<EOF" >> $GITHUB_OUTPUT
@@ -186,5 +185,5 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `#### Terragrunt Plan 📖\n<details><summary>Show Plan</summary>\n\n\`\`\`\n${{ steps.plan.outputs.output }}\n\`\`\`\n</details>`
+              body: `#### Terragrunt Plan\n<details><summary>Show Plan</summary>\n\n\`\`\`\n${{ steps.plan.outputs.output }}\n\`\`\`\n</details>`
             });

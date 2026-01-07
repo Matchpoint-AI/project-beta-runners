@@ -1,0 +1,69 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: arc-runners
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: ghcr.io/actions/actions-runner-controller-charts
+    targetRevision: 0.9.3
+    chart: gha-runner-scale-set
+    helm:
+      releaseName: arc-runners
+      values: |
+        # GitHub configuration
+        githubConfigUrl: https://github.com/Matchpoint-AI
+        githubConfigSecret: arc-org-github-secret
+
+        # Runner label (workflows use: runs-on: project-beta-runners)
+        runnerScaleSetName: project-beta-runners
+
+        # Autoscaling configuration
+        minRunners: 5
+        maxRunners: 25
+
+        # Controller reference
+        controllerServiceAccount:
+          namespace: arc-systems
+          name: arc-controller-gha-rs-controller
+
+        # Runner pod template with DinD sidecar for Docker support
+        template:
+          spec:
+            containers:
+              - name: runner
+                image: ghcr.io/actions/actions-runner:latest
+                env:
+                  - name: DOCKER_HOST
+                    value: tcp://localhost:2375
+                  - name: DOCKER_API_VERSION
+                    value: "1.43"
+                securityContext:
+                  runAsUser: 1000
+              - name: dind
+                image: docker:24-dind
+                securityContext:
+                  privileged: true
+                env:
+                  - name: DOCKER_TLS_CERTDIR
+                    value: ""
+                volumeMounts:
+                  - name: dind-storage
+                    mountPath: /var/lib/docker
+            volumes:
+              - name: dind-storage
+                emptyDir:
+                  sizeLimit: 20Gi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: arc-runners
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
