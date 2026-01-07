@@ -31,15 +31,13 @@ resource "spot_cloudspace" "this" {
 resource "spot_spotnodepool" "this" {
   cloudspace_name = spot_cloudspace.this.cloudspace_name
   server_class    = var.server_class
+  bid_price       = 0.0 # On-demand pricing (no spot bidding)
 
   # Autoscaling configuration
-  bid_price   = 0.0 # On-demand pricing (no spot bidding)
-  autoscaling = true
-  min_nodes   = var.min_nodes
-  max_nodes   = var.max_nodes
-
-  # Wait for nodepool to be ready
-  wait_until_ready = true
+  autoscaling {
+    min_nodes = var.min_nodes
+    max_nodes = var.max_nodes
+  }
 
   depends_on = [spot_cloudspace.this]
 }
