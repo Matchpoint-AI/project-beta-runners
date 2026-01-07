@@ -26,13 +26,13 @@ Control plane provisioning takes **50-60 minutes**. Plan workflows accordingly.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5.0 |
-| <a name="requirement_rackspace-spot"></a> [rackspace-spot](#requirement\_rackspace-spot) | >= 0.1.0 |
+| <a name="requirement_spot"></a> [spot](#requirement\_spot) | >= 0.1.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_rackspace-spot"></a> [rackspace-spot](#provider\_rackspace-spot) | >= 0.1.0 |
+| <a name="provider_spot"></a> [spot](#provider\_spot) | >= 0.1.0 |
 
 ## Modules
 
@@ -42,8 +42,8 @@ No modules.
 
 | Name | Type |
 |------|------|
-| [rackspace-spot_cloudspace.this](https://registry.terraform.io/providers/rackerlabs/rackspace-spot/latest/docs/resources/cloudspace) | resource |
-| [rackspace-spot_spotnodepool.this](https://registry.terraform.io/providers/rackerlabs/rackspace-spot/latest/docs/resources/spotnodepool) | resource |
+| [spot_cloudspace.this](https://registry.terraform.io/providers/rackerlabs/spot/latest/docs/resources/cloudspace) | resource |
+| [spot_spotnodepool.this](https://registry.terraform.io/providers/rackerlabs/spot/latest/docs/resources/spotnodepool) | resource |
 
 ## Inputs
 

@@ -6,8 +6,8 @@ terraform {
   required_version = ">= 1.5.0"
 
   required_providers {
-    rackspace-spot = {
-      source  = "rackerlabs/rackspace-spot"
+    spot = {
+      source  = "rackerlabs/spot"
       version = ">= 0.1.0"
     }
     kubernetes = {
@@ -24,12 +24,12 @@ terraform {
 # -----------------------------------------------------------------------------
 # Kubeconfig Data Source
 # -----------------------------------------------------------------------------
-data "rackspace-spot_kubeconfig" "this" {
+data "spot_kubeconfig" "this" {
   cloudspace_name = var.cloudspace_name
 }
 
 locals {
-  kubeconfig = yamldecode(data.rackspace-spot_kubeconfig.this.raw)
+  kubeconfig = yamldecode(data.spot_kubeconfig.this.raw)
 }
 
 # -----------------------------------------------------------------------------

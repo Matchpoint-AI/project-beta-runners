@@ -36,7 +36,7 @@ generate "provider" {
   path      = "provider.tf"
   if_exists = "overwrite_terragrunt"
   contents  = <<EOF
-provider "rackspace-spot" {
+provider "spot" {
   token = var.rackspace_spot_token
 }
 

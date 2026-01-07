@@ -2,7 +2,7 @@
 
 output "kubeconfig_raw" {
   description = "Raw kubeconfig YAML for the cluster"
-  value       = data.rackspace-spot_kubeconfig.this.raw
+  value       = data.spot_kubeconfig.this.raw
   sensitive   = true
 }
 

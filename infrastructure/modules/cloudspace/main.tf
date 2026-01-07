@@ -7,8 +7,8 @@ terraform {
   required_version = ">= 1.5.0"
 
   required_providers {
-    rackspace-spot = {
-      source  = "rackerlabs/rackspace-spot"
+    spot = {
+      source  = "rackerlabs/spot"
       version = ">= 0.1.0"
     }
   }
@@ -17,7 +17,7 @@ terraform {
 # -----------------------------------------------------------------------------
 # Cloudspace (Kubernetes Cluster)
 # -----------------------------------------------------------------------------
-resource "rackspace-spot_cloudspace" "this" {
+resource "spot_cloudspace" "this" {
   cloudspace_name = var.cluster_name
   region          = var.region
 
@@ -28,8 +28,8 @@ resource "rackspace-spot_cloudspace" "this" {
 # -----------------------------------------------------------------------------
 # Node Pool
 # -----------------------------------------------------------------------------
-resource "rackspace-spot_spotnodepool" "this" {
-  cloudspace_name = rackspace-spot_cloudspace.this.cloudspace_name
+resource "spot_spotnodepool" "this" {
+  cloudspace_name = spot_cloudspace.this.cloudspace_name
   server_class    = var.server_class
 
   # Autoscaling configuration
@@ -41,5 +41,5 @@ resource "rackspace-spot_spotnodepool" "this" {
   # Wait for nodepool to be ready
   wait_until_ready = true
 
-  depends_on = [rackspace-spot_cloudspace.this]
+  depends_on = [spot_cloudspace.this]
 }
