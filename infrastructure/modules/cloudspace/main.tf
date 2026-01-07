@@ -176,6 +176,7 @@ data "external" "kubeconfig" {
 
 locals {
   # Decode the base64-encoded kubeconfig from the external data source
+  # Use null as fallback since yamldecode returns a complex object that must match
   kubeconfig_raw = data.external.kubeconfig.result.kubeconfig != "" ? base64decode(data.external.kubeconfig.result.kubeconfig) : ""
-  kubeconfig     = local.kubeconfig_raw != "" ? yamldecode(local.kubeconfig_raw) : {}
+  kubeconfig     = local.kubeconfig_raw != "" ? yamldecode(local.kubeconfig_raw) : null
 }
