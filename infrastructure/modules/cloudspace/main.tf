@@ -3,6 +3,12 @@
 # Creates a Rackspace Spot managed Kubernetes cluster and node pool.
 # Control plane provisioning typically takes 50-60 minutes for new clusters.
 #
+# ⚠️  WARNING: CLOUDSPACE RECREATION IS EXPENSIVE
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Changing `cluster_name` destroys the cloudspace and creates a new one.
+# This triggers a 50-60 minute wait for control plane provisioning.
+# Only rename the cloudspace if absolutely necessary.
+#
 # Key behavior:
 # - spotctl writes kubeconfig to ~/.kube/<cluster>.yaml (not configurable path)
 # - We copy from there to the module directory for terraform to read
@@ -35,6 +41,7 @@ variable "rackspace_spot_token" {
 # -----------------------------------------------------------------------------
 # Cloudspace (Kubernetes Cluster)
 # -----------------------------------------------------------------------------
+# ⚠️  Changing cloudspace_name triggers FULL RECREATION (50-60 min downtime)
 
 resource "spot_cloudspace" "this" {
   cloudspace_name  = var.cluster_name

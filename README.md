@@ -54,7 +54,7 @@ jobs:
 ┌──────────────────────────────────────────────────────────────────────────┐
 │                        Rackspace Spot Cloudspace                         │
 │  ┌────────────────────────────────────────────────────────────────────┐ │
-│  │                     Kubernetes Cluster (mp-runners-v3)             │ │
+│  │                 Kubernetes Cluster (matchpoint-runners)            │ │
 │  │                                                                    │ │
 │  │  ┌──────────────┐    ┌──────────────┐    ┌──────────────────────┐ │ │
 │  │  │   ArgoCD     │───▶│ ARC Controller│───▶│   Runner Pods       │ │ │
@@ -107,6 +107,21 @@ jobs:
 | 3-argocd-apps | Bootstrap Application + secrets | 1-2 min | 15 min |
 
 > **Note:** Stage 3 creates a bootstrap ArgoCD Application that syncs the `argocd/applications/` directory. ArgoCD then manages ARC deployment, not Terraform directly.
+
+### ⚠️ Cloudspace Recreation Warning
+
+**Changing the cloudspace name forces full recreation, which takes 50-60 minutes.**
+
+The cloudspace name (`cluster_name` in `prod.hcl`) is the primary identifier. Any change triggers:
+1. Destruction of existing cloudspace (immediate)
+2. Creation of new cloudspace (immediate)
+3. Control plane provisioning (50-60 minutes)
+4. Kubeconfig fetch and remaining stages
+
+**Avoid cloudspace recreation unless absolutely necessary.** Safe changes that don't trigger recreation:
+- Node pool scaling (`min_nodes`, `max_nodes`)
+- ArgoCD application configs (`argocd/applications/`)
+- Runner configuration changes
 
 ---
 

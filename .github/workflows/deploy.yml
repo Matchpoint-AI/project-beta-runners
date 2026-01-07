@@ -9,6 +9,12 @@ on:
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
+# Queue deployments - don't cancel in-progress runs
+# Cloudspace provisioning takes 50-60 min, so we must let existing deploys finish
+concurrency:
+  group: deploy-infrastructure
+  cancel-in-progress: false
+
 env:
   OPENTOFU_VERSION: "1.8.0"
   TERRAGRUNT_VERSION: "0.54.0"
@@ -100,7 +106,7 @@ jobs:
         run: |
           echo "Deploying infrastructure..."
           echo "Pre-flight status: ${{ steps.preflight.outputs.cloudspace_status }}"
-          terragrunt run-all apply -auto-approve --terragrunt-non-interactive -lock-timeout=5m
+          terragrunt run-all apply -auto-approve --terragrunt-non-interactive -lock-timeout=120m
 
       - name: Release OUR state locks on cancel
         if: cancelled()
