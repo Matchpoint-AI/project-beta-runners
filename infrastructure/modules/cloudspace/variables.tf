@@ -11,9 +11,9 @@ variable "region" {
 }
 
 variable "server_class" {
-  description = "Node pool server class (e.g., gp.vs1.large = 4 vCPU, 15GB RAM)"
+  description = "Node pool server class (e.g., gp.vs1.xlarge-dfw = 8 vCPU, 30GB RAM in DFW)"
   type        = string
-  default     = "gp.vs1.large"
+  default     = "gp.vs1.xlarge-dfw"
 }
 
 variable "min_nodes" {
