@@ -12,6 +12,8 @@ on:
 env:
   OPENTOFU_VERSION: "1.8.0"
   TERRAGRUNT_VERSION: "0.54.0"
+  SPOTCTL_VERSION: "0.1.1"
+  CLOUDSPACE_NAME: "mp-runners-v3"
 
 jobs:
   deploy:
@@ -40,6 +42,66 @@ jobs:
           chmod +x terragrunt_linux_amd64
           sudo mv terragrunt_linux_amd64 /usr/local/bin/terragrunt
 
+      - name: Install spotctl
+        run: |
+          echo "Installing spotctl v${{ env.SPOTCTL_VERSION }}..."
+          curl -sL "https://github.com/rackspace-spot/spotctl/releases/download/v${{ env.SPOTCTL_VERSION }}/spotctl-linux-amd64" -o spotctl
+          chmod +x spotctl
+          sudo mv spotctl /usr/local/bin/
+          spotctl --version
+
+      - name: Configure spotctl
+        env:
+          RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
+          RACKSPACE_ORG: ${{ secrets.RACKSPACE_ORG }}
+        run: |
+          mkdir -p ~/.spotctl
+          cat > ~/.spotctl/config.json << EOF
+          {
+            "organization": "${RACKSPACE_ORG:-matchpoint}",
+            "region": "us-central-ord-1",
+            "refresh_token": "${RACKSPACE_SPOT_TOKEN}"
+          }
+          EOF
+
+      - name: Pre-flight cloudspace check
+        id: preflight
+        run: |
+          echo "=== Pre-flight Cloudspace Check ==="
+          
+          # Check if cloudspace exists and its status
+          if spotctl cloudspaces get "${{ env.CLOUDSPACE_NAME }}" --output json > /tmp/cloudspace.json 2>&1; then
+            STATUS=$(jq -r '.status // "Unknown"' /tmp/cloudspace.json)
+            echo "cloudspace_exists=true" >> $GITHUB_OUTPUT
+            echo "cloudspace_status=$STATUS" >> $GITHUB_OUTPUT
+            
+            echo "Cloudspace: ${{ env.CLOUDSPACE_NAME }}"
+            echo "Status: $STATUS"
+            
+            case "$STATUS" in
+              "Ready"|"Running")
+                echo "✅ Cloudspace is healthy"
+                ;;
+              "Provisioning"|"Creating")
+                echo "::warning::Cloudspace is still provisioning - this deploy may take longer"
+                echo "   The cluster was started in a previous run and is still coming up."
+                ;;
+              "Failed"|"Error")
+                echo "::error::Cloudspace is in $STATUS state!"
+                echo "   Consider running: spotctl cloudspaces delete --name ${{ env.CLOUDSPACE_NAME }}"
+                echo "   Then re-trigger this workflow."
+                # Don't fail - let terragrunt handle it
+                ;;
+              *)
+                echo "::notice::Unknown status: $STATUS"
+                ;;
+            esac
+          else
+            echo "cloudspace_exists=false" >> $GITHUB_OUTPUT
+            echo "cloudspace_status=NotFound" >> $GITHUB_OUTPUT
+            echo "Cloudspace ${{ env.CLOUDSPACE_NAME }} does not exist - will be created"
+          fi
+
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
         with:
@@ -60,6 +122,14 @@ jobs:
           echo "  Stage 2: Cluster Base (ArgoCD) - 5-10 min"
           echo "  Stage 3: ArgoCD Apps (Runner deployment) - 1-2 min"
           echo ""
+          echo "Pre-flight status: ${{ steps.preflight.outputs.cloudspace_status }}"
+          echo ""
           terragrunt run-all apply -auto-approve --terragrunt-non-interactive
+
+      - name: Post-deploy cloudspace status
+        if: always()
+        run: |
+          echo "=== Post-Deploy Cloudspace Status ==="
+          spotctl cloudspaces get "${{ env.CLOUDSPACE_NAME }}" --output json | jq '.' || echo "Could not fetch status"
 
   # Note: verify-runners.yml triggers automatically via workflow_run
