@@ -128,17 +128,30 @@ jobs:
           # Use -lock-timeout to wait for stale locks instead of failing immediately
           terragrunt run-all apply -auto-approve --terragrunt-non-interactive -lock-timeout=5m
 
-      - name: Release state lock on cancel
+      - name: Release OUR state locks on cancel
         if: cancelled()
         env:
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         run: |
-          echo "Workflow cancelled - releasing any state locks..."
+          echo "Workflow cancelled - checking for locks held by THIS workflow..."
+          CURRENT_RUNNER=$(hostname)
+          
           for stage in 1-cloudspace 2-cluster-base 3-argocd-apps; do
             LOCK_PATH="gs://${GCS_BUCKET}/runners/prod/${stage}/default.tflock"
-            if gcloud storage ls "${LOCK_PATH}" 2>/dev/null; then
-              echo "Releasing lock for ${stage}..."
-              gcloud storage rm "${LOCK_PATH}" || true
+            
+            # Check if lock exists and who holds it
+            if gcloud storage cat "${LOCK_PATH}" > /tmp/lockinfo.json 2>/dev/null; then
+              LOCK_HOLDER=$(jq -r '.Who // "unknown"' /tmp/lockinfo.json 2>/dev/null || echo "unknown")
+              
+              # Only release if WE hold the lock (runner hostname matches)
+              if [[ "$LOCK_HOLDER" == *"$CURRENT_RUNNER"* ]]; then
+                echo "✅ Releasing OUR lock for ${stage} (held by: $LOCK_HOLDER)"
+                gcloud storage rm "${LOCK_PATH}" || true
+              else
+                echo "⚠️  Lock for ${stage} held by different runner: $LOCK_HOLDER - NOT releasing"
+              fi
+            else
+              echo "   No lock found for ${stage}"
             fi
           done
           echo "Lock cleanup complete"
