@@ -78,8 +78,8 @@ jobs:
           echo "==========================================="
           echo ""
           
-          # Get detailed status
-          if spotctl cloudspaces get "$CLOUDSPACE" --output json > /tmp/status.json 2>&1; then
+          # Get detailed status (--name flag required)
+          if spotctl cloudspaces get --name "$CLOUDSPACE" --output json > /tmp/status.json 2>&1; then
             echo "Status: $(jq -r '.status // "Unknown"' /tmp/status.json)"
             echo "Region: $(jq -r '.region // "Unknown"' /tmp/status.json)"
             echo "Created: $(jq -r '.created_at // "Unknown"' /tmp/status.json)"
@@ -118,7 +118,7 @@ jobs:
           echo "==========================================="
           echo ""
           
-          if spotctl cloudspaces get-config "$CLOUDSPACE" --file /tmp/kubeconfig 2>/dev/null; then
+          if spotctl cloudspaces get-config --name "$CLOUDSPACE" --file /tmp/kubeconfig 2>/dev/null; then
             echo "✅ Kubeconfig is available!"
             echo ""
             echo "Cluster info:"
@@ -140,7 +140,6 @@ jobs:
       - name: Summary
         env:
           CLOUDSPACE: ${{ inputs.cloudspace_name }}
-          RACKSPACE_ORG: ${{ secrets.RACKSPACE_ORG }}
         run: |
           echo ""
           echo "==========================================="
@@ -148,7 +147,7 @@ jobs:
           echo "==========================================="
           echo ""
           echo "Run these locally with spotctl:"
-          echo "  spotctl cloudspaces get $CLOUDSPACE --output json"
-          echo "  spotctl cloudspaces get-config $CLOUDSPACE --file ~/.kube/config-$CLOUDSPACE"
+          echo "  spotctl cloudspaces get --name $CLOUDSPACE --output json"
+          echo "  spotctl cloudspaces get-config --name $CLOUDSPACE --file ~/.kube/config-$CLOUDSPACE"
           echo "  spotctl nodepools spot list --cloudspace $CLOUDSPACE"
           echo "  spotctl cloudspaces delete --name $CLOUDSPACE  # If stuck, delete and retry"
