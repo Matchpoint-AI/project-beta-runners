@@ -41,21 +41,20 @@ resource "kubernetes_namespace" "arc_runners" {
 }
 
 # -----------------------------------------------------------------------------
-# GitHub App Secret for Runner Registration
+# GitHub Token Secret for Runner Registration
+# Uses PAT with admin:org and manage_runners:org scopes
 # -----------------------------------------------------------------------------
-resource "kubernetes_secret" "github_app" {
+resource "kubernetes_secret" "github_token" {
   metadata {
-    name      = "github-app-secret"
-    namespace = local.arc_namespace
+    name      = "arc-org-github-secret"
+    namespace = local.runner_namespace
   }
 
   data = {
-    github_app_id              = var.github_app_id
-    github_app_installation_id = var.github_app_installation_id
-    github_app_private_key     = var.github_app_private_key
+    github_token = var.github_token
   }
 
-  depends_on = [kubernetes_namespace.arc_systems]
+  depends_on = [kubernetes_namespace.arc_runners]
 }
 
 # -----------------------------------------------------------------------------
@@ -91,7 +90,7 @@ resource "helm_release" "arc_runners" {
   values = [yamlencode({
     # GitHub configuration
     githubConfigUrl    = "https://github.com/${var.github_org}"
-    githubConfigSecret = kubernetes_secret.github_app.metadata[0].name
+    githubConfigSecret = kubernetes_secret.github_token.metadata[0].name
 
     # Runner label (this is what workflows use: runs-on: project-beta-runners)
     runnerScaleSetName = var.runner_label
@@ -135,6 +134,6 @@ resource "helm_release" "arc_runners" {
   depends_on = [
     helm_release.arc_controller,
     kubernetes_namespace.arc_runners,
-    kubernetes_secret.github_app
+    kubernetes_secret.github_token
   ]
 }

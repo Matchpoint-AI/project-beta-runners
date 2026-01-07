@@ -1,7 +1,6 @@
 # project-beta-runners
 
-[![Infrastructure](https://img.shields.io/badge/Terragrunt-3%20States-blue)](https://terragrunt.gruntwork.io/)
-[![State](https://img.shields.io/badge/State-GCS-yellow)](https://cloud.google.com/storage)
+[![Infrastructure](https://img.shields.io/badge/Terragrunt-3%20Stages-blue)](https://terragrunt.gruntwork.io/)
 [![Runners](https://img.shields.io/badge/ARC-v0.9.x-green)](https://github.com/actions/actions-runner-controller)
 [![Platform](https://img.shields.io/badge/Rackspace%20Spot-Kubernetes-purple)](https://spot.rackspace.com/)
 
@@ -67,9 +66,9 @@ jobs:
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Terragrunt 3-State Architecture
+### Terragrunt 3-Stage Architecture
 
-| State | Purpose | Duration | Timeout |
+| Stage | Purpose | Duration | Timeout |
 |-------|---------|----------|---------|
 | 1-cloudspace | Rackspace Spot K8s cluster + node pool | 50-60 min | 90 min |
 | 2-cluster-base | Kubeconfig fetch + ArgoCD install | 5-10 min | 20 min |
@@ -97,7 +96,7 @@ project-beta-runners/
 │   │       └── outputs.tf
 │   │
 │   └── live/                         # Terragrunt configurations
-│       ├── root.hcl                  # Root config (GCS backend)
+│       ├── root.hcl                  # Root config (TFstate.dev backend)
 │       ├── env-vars/
 │       │   └── prod.hcl              # Production variables
 │       └── prod/
@@ -110,6 +109,7 @@ project-beta-runners/
 │
 ├── .github/
 │   └── workflows/
+│       ├── ci.yml                    # Format, validate, docs checks
 │       ├── deploy.yml                # Plan on PR, Apply on merge
 │       ├── verify-runners.yml        # Test runners after deploy
 │       └── manual.yml                # Destroy, force-apply
@@ -135,10 +135,19 @@ project-beta-runners/
 
 ## CI/CD Workflows
 
+### CI (`ci.yml`)
+
+| Check | Description |
+|-------|-------------|
+| Terraform Format | `terraform fmt -check -recursive` |
+| Terraform Validate | `terraform validate` per module |
+| Terraform Docs | `terraform-docs --output-check` |
+| Terragrunt Plan | Preview changes (after validation) |
+
 ### Deploy (`deploy.yml`)
 
 - **On PR**: Runs `terragrunt plan` for preview
-- **On merge to main**: Applies sequentially (State 1 → 2 → 3)
+- **On merge to main**: Applies sequentially (Stage 1 → 2 → 3)
 - **Auto-triggers**: `verify-runners.yml` after successful deploy
 
 ### Verify (`verify-runners.yml`)
@@ -149,23 +158,19 @@ project-beta-runners/
 ### Manual (`manual.yml`)
 
 - `plan-all`: Preview all changes
-- `apply-state-N`: Apply individual state
+- `apply-stage-N`: Apply individual stage
 - `destroy-all`: Destroy infrastructure (requires confirmation)
 
 ---
 
 ## Required Secrets
 
-| Secret | Purpose |
-|--------|---------|
-| `GCP_PROJECT` | GCP project for state bucket |
-| `GCS_BUCKET` | Terraform state bucket |
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | WIF provider |
-| `GCP_SERVICE_ACCOUNT` | Service account for WIF |
-| `RACKSPACE_SPOT_API_TOKEN` | Rackspace API |
-| `ARC_GITHUB_APP_ID` | Runner registration |
-| `ARC_GITHUB_APP_PRIVATE_KEY` | Runner auth |
-| `ARC_GITHUB_APP_INSTALLATION_ID` | Org installation |
+| Secret | Source | Purpose |
+|--------|--------|---------|
+| `RACKSPACE_SPOT_API_TOKEN` | Org secret | Rackspace Spot API |
+| `INFRA_GH_TOKEN` | Org secret | TFstate.dev backend + ARC runner registration |
+
+> **Note:** Both secrets are org-level and already granted to this repository.
 
 ---
 
@@ -177,14 +182,14 @@ brew install terragrunt terraform
 
 # Set credentials
 export RACKSPACE_SPOT_TOKEN="your-token"
-export GCP_PROJECT="your-project"
-export GCS_BUCKET="your-bucket"
+export TF_HTTP_PASSWORD="your-github-token"  # For TFstate.dev backend
+export INFRA_GH_TOKEN="your-github-token"    # For ARC runner registration
 
-# Plan all states
+# Plan all stages
 cd infrastructure/live/prod
 terragrunt run-all plan
 
-# Apply specific state
+# Apply specific stage
 cd infrastructure/live/prod/1-cloudspace
 terragrunt apply
 ```

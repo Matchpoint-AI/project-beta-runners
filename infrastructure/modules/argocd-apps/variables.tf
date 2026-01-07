@@ -30,20 +30,8 @@ variable "github_org" {
   default     = "Matchpoint-AI"
 }
 
-variable "github_app_id" {
-  description = "GitHub App ID for runner registration"
-  type        = string
-  sensitive   = true
-}
-
-variable "github_app_installation_id" {
-  description = "GitHub App Installation ID"
-  type        = string
-  sensitive   = true
-}
-
-variable "github_app_private_key" {
-  description = "GitHub App private key (base64 encoded)"
+variable "github_token" {
+  description = "GitHub PAT for runner registration (requires admin:org and manage_runners:org scopes)"
   type        = string
   sensitive   = true
 }
