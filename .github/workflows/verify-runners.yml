@@ -1,0 +1,43 @@
+name: Verify Runners
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["Deploy Infrastructure"]
+    types: [completed]
+
+jobs:
+  verify:
+    # This job runs ON the self-hosted runners to verify they work
+    runs-on: project-beta-runners
+    timeout-minutes: 10
+    
+    steps:
+      - name: Runner Info
+        run: |
+          echo "✅ Runner is online and accepting jobs"
+          echo "Runner: $RUNNER_NAME"
+          echo "OS: $RUNNER_OS"
+          
+      - name: Verify Docker
+        run: |
+          echo "Testing Docker connectivity..."
+          docker version
+          echo "✅ Docker is available"
+          
+      - name: Test Docker Build
+        run: |
+          echo "FROM alpine:latest" > /tmp/Dockerfile
+          echo "RUN echo 'Hello from test build'" >> /tmp/Dockerfile
+          docker build -t test-build:latest /tmp
+          echo "✅ Docker build works"
+          
+      - name: Test Docker Run
+        run: |
+          docker run --rm alpine:latest echo "Hello from container"
+          echo "✅ Docker run works"
+          
+      - name: Cleanup
+        run: |
+          docker rmi test-build:latest || true
+          echo "✅ Verification complete"
