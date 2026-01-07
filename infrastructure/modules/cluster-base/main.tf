@@ -67,22 +67,22 @@ resource "helm_release" "argocd" {
   chart      = "argo-cd"
   version    = var.argocd_chart_version
   namespace  = kubernetes_namespace.argocd.metadata[0].name
-  
+
   wait    = true
-  timeout = 600  # 10 minutes
-  
+  timeout = 600 # 10 minutes
+
   # Core settings
   set {
     name  = "server.service.type"
     value = "ClusterIP"
   }
-  
+
   # Disable dex (we use GitHub App auth)
   set {
     name  = "dex.enabled"
     value = "false"
   }
-  
+
   # Enable repo server for GitOps
   set {
     name  = "repoServer.replicas"

@@ -1,0 +1,178 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+env:
+  TERRAFORM_VERSION: "1.5.7"
+  TERRAGRUNT_VERSION: "0.54.0"
+
+jobs:
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      terraform_changed: ${{ steps.changes.outputs.terraform_any_changed }}
+      ci_changed: ${{ steps.changes.outputs.ci_any_changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed files
+        uses: tj-actions/changed-files@v44
+        id: changes
+        with:
+          files_yaml: |
+            terraform:
+              - 'infrastructure/**/*.tf'
+              - 'infrastructure/**/*.hcl'
+            ci:
+              - '.github/workflows/**'
+
+      - name: Print results
+        run: |
+          echo "Terraform changed: ${{ steps.changes.outputs.terraform_any_changed }}"
+          echo "CI changed: ${{ steps.changes.outputs.ci_any_changed }}"
+
+  format:
+    name: Terraform Format
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.terraform_changed == 'true' || needs.detect-changes.outputs.ci_changed == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Check formatting
+        run: |
+          echo "🔍 Checking Terraform formatting..."
+          if ! terraform fmt -check -recursive infrastructure/; then
+            echo "❌ Terraform files need formatting"
+            echo "💡 Run: terraform fmt -recursive infrastructure/"
+            exit 1
+          fi
+          echo "✅ All Terraform files properly formatted"
+
+  validate:
+    name: Terraform Validate
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.terraform_changed == 'true' || needs.detect-changes.outputs.ci_changed == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Validate modules
+        run: |
+          echo "🔍 Validating Terraform modules..."
+          for module in infrastructure/modules/*/; do
+            if [ -d "$module" ]; then
+              echo "Validating: $module"
+              cd "$module"
+              terraform init -backend=false
+              terraform validate
+              cd - > /dev/null
+            fi
+          done
+          echo "✅ All modules valid"
+
+  docs:
+    name: Terraform Docs
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.terraform_changed == 'true' || needs.detect-changes.outputs.ci_changed == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install terraform-docs
+        run: |
+          curl -sSLo terraform-docs.tar.gz https://github.com/terraform-docs/terraform-docs/releases/download/v0.17.0/terraform-docs-v0.17.0-linux-amd64.tar.gz
+          tar -xzf terraform-docs.tar.gz
+          chmod +x terraform-docs
+          sudo mv terraform-docs /usr/local/bin/
+
+      - name: Check documentation
+        run: |
+          echo "🔍 Checking Terraform documentation..."
+          failed=false
+          for module in infrastructure/modules/*/; do
+            if [ -d "$module" ] && ls "$module"/*.tf 1> /dev/null 2>&1; then
+              module_name=$(basename "$module")
+              if [ ! -f "$module/README.md" ]; then
+                echo "❌ Missing README.md: $module_name"
+                failed=true
+              elif ! terraform-docs markdown table --output-check "$module"; then
+                echo "❌ Docs outdated: $module_name"
+                failed=true
+              fi
+            fi
+          done
+          if [ "$failed" = true ]; then
+            echo "💡 Run: terraform-docs markdown table --output-file README.md --output-mode inject <module>"
+            exit 1
+          fi
+          echo "✅ All module documentation up-to-date"
+
+  plan:
+    name: Terragrunt Plan
+    runs-on: ubuntu-latest
+    needs: [format, validate, docs]
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Setup Terragrunt
+        run: |
+          wget -q https://github.com/gruntwork-io/terragrunt/releases/download/v${{ env.TERRAGRUNT_VERSION }}/terragrunt_linux_amd64
+          chmod +x terragrunt_linux_amd64
+          sudo mv terragrunt_linux_amd64 /usr/local/bin/terragrunt
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Terragrunt Plan
+        id: plan
+        working-directory: infrastructure/live/prod
+        env:
+          GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
+          ARC_GITHUB_APP_ID: ${{ secrets.ARC_GITHUB_APP_ID }}
+          ARC_GITHUB_APP_INSTALLATION_ID: ${{ secrets.ARC_GITHUB_APP_INSTALLATION_ID }}
+          ARC_GITHUB_APP_PRIVATE_KEY: ${{ secrets.ARC_GITHUB_APP_PRIVATE_KEY }}
+        run: |
+          terragrunt run-all plan -no-color 2>&1 | tee plan.txt
+          echo "output<<EOF" >> $GITHUB_OUTPUT
+          head -c 60000 plan.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `#### Terragrunt Plan 📖\n<details><summary>Show Plan</summary>\n\n\`\`\`\n${{ steps.plan.outputs.output }}\n\`\`\`\n</details>`
+            });
