@@ -105,8 +105,8 @@ resource "terraform_data" "wait_for_cluster" {
       fi
       
       for i in $(seq 1 $MAX_ATTEMPTS); do
-        # Get cloudspace status using spotctl
-        if STATUS_JSON=$($SPOTCTL cloudspaces get "$CLUSTER_NAME" --output json 2>&1); then
+        # Get cloudspace status using spotctl (--name flag required)
+        if STATUS_JSON=$($SPOTCTL cloudspaces get --name "$CLUSTER_NAME" --output json 2>&1); then
           STATUS=$(echo "$STATUS_JSON" | jq -r '.status // "Unknown"')
           
           case "$STATUS" in
@@ -118,7 +118,7 @@ resource "terraform_data" "wait_for_cluster" {
               echo "=============================================="
               
               # Verify kubeconfig is accessible
-              if $SPOTCTL cloudspaces get-config "$CLUSTER_NAME" --file /tmp/kubeconfig-test 2>/dev/null; then
+              if $SPOTCTL cloudspaces get-config --name "$CLUSTER_NAME" --file /tmp/kubeconfig-test 2>/dev/null; then
                 echo "✅ Kubeconfig verified accessible"
                 rm -f /tmp/kubeconfig-test
                 exit 0
@@ -159,7 +159,7 @@ resource "terraform_data" "wait_for_cluster" {
       echo "Last known status: $STATUS"
       echo ""
       echo "Check status manually:"
-      echo "  spotctl cloudspaces get $CLUSTER_NAME --output json"
+      echo "  spotctl cloudspaces get --name $CLUSTER_NAME --output json"
       echo "=============================================="
       exit 1
     EOT
