@@ -21,7 +21,8 @@ inputs = {
   max_nodes    = 15
 }
 
-# Temporary import blocks - remove after first successful apply
+# TODO(#94): Remove import blocks after successful state import
+# https://github.com/Matchpoint-AI/project-beta-runners/issues/94
 generate "imports" {
   path      = "imports.tf"
   if_exists = "overwrite_terragrunt"
