@@ -29,26 +29,31 @@ output "node_scaling" {
 }
 
 # Kubeconfig outputs for downstream modules
-# Uses dynamically fetched kubeconfig via spotctl (fresh every apply)
+# Uses dynamically fetched kubeconfig via spotctl external data source
 output "kubeconfig_raw" {
   description = "Raw kubeconfig YAML (fetched fresh via spotctl)"
-  value       = data.local_file.kubeconfig.content
+  value       = local.kubeconfig_raw
   sensitive   = true
+}
+
+output "cloudspace_status" {
+  description = "Current cloudspace status from spotctl"
+  value       = data.external.kubeconfig.result.status
 }
 
 output "cluster_endpoint" {
   description = "Kubernetes API server endpoint"
-  value       = local.kubeconfig["clusters"][0]["cluster"]["server"]
+  value       = try(local.kubeconfig["clusters"][0]["cluster"]["server"], "")
 }
 
 output "cluster_ca_certificate" {
   description = "Base64-encoded cluster CA certificate"
-  value       = local.kubeconfig["clusters"][0]["cluster"]["certificate-authority-data"]
+  value       = try(local.kubeconfig["clusters"][0]["cluster"]["certificate-authority-data"], "")
   sensitive   = true
 }
 
 output "cluster_token" {
   description = "Authentication token for the cluster"
-  value       = local.kubeconfig["users"][0]["user"]["token"]
+  value       = try(local.kubeconfig["users"][0]["user"]["token"], "")
   sensitive   = true
 }
