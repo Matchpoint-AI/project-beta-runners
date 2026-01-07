@@ -70,7 +70,7 @@ resource "spot_spotnodepool" "this" {
 # Also installs spotctl binary if not present.
 
 resource "terraform_data" "setup_spotctl_config" {
-  triggers_replace = [spot_cloudspace.this.id]
+  triggers_replace = [spot_cloudspace.this.cloudspace_name]
 
   provisioner "local-exec" {
     command = <<-EOT
@@ -99,7 +99,7 @@ resource "terraform_data" "setup_spotctl_config" {
 # Max wait: 240 attempts * 30s = 2 hours
 
 resource "terraform_data" "wait_for_cluster" {
-  triggers_replace = [terraform_data.setup_spotctl_config.id]
+  triggers_replace = [terraform_data.setup_spotctl_config.output]
 
   provisioner "local-exec" {
     command = <<-EOT
@@ -110,6 +110,7 @@ resource "terraform_data" "wait_for_cluster" {
       SLEEP_INTERVAL=30
       SPOTCTL=$(command -v spotctl || echo "/tmp/spotctl")
       
+      mkdir -p ~/.kube
       echo "Waiting for cloudspace $CLUSTER_NAME (max 2 hours)..."
       
       for i in $(seq 1 $MAX_ATTEMPTS); do
@@ -163,6 +164,7 @@ resource "terraform_data" "fetch_kubeconfig" {
       DEST_PATH="${path.module}/kubeconfig.yaml"
       SPOTCTL=$(command -v spotctl || echo "/tmp/spotctl")
       
+      mkdir -p ~/.kube
       echo "Fetching kubeconfig for $CLUSTER_NAME..."
       $SPOTCTL cloudspaces get-config --name "$CLUSTER_NAME"
       
