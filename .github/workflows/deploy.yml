@@ -13,7 +13,7 @@ env:
   OPENTOFU_VERSION: "1.8.0"
   TERRAGRUNT_VERSION: "0.54.0"
   SPOTCTL_VERSION: "0.1.1"
-  CLOUDSPACE_NAME: "mp-runners-v3"
+  CLOUDSPACE_NAME: "matchpoint-runners"
   GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
 
 jobs:
