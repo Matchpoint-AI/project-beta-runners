@@ -128,7 +128,7 @@ resource "terraform_data" "wait_for_cluster" {
               ;;
             "Provisioning"|"Creating"|"Pending")
               ELAPSED=$((i * SLEEP_INTERVAL / 60))
-              echo "[$i/$MAX_ATTEMPTS] Status: $STATUS (elapsed: ${ELAPSED}m)"
+              echo "[$i/$MAX_ATTEMPTS] Status: $STATUS (elapsed: $${ELAPSED}m)"
               ;;
             "Failed"|"Error"|"Degraded")
               echo ""
