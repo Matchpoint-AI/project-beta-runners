@@ -76,7 +76,8 @@ jobs:
         run: |
           echo "🔍 Validating Terraform modules..."
           # Skip modules with custom providers not in public registry
-          SKIP_MODULES="cloudspace"
+          # cloudspace and cluster-base both use rackerlabs/rackspace-spot
+          SKIP_MODULES="cloudspace cluster-base"
 
           for module in infrastructure/modules/*/; do
             if [ -d "$module" ]; then
