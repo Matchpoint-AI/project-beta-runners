@@ -9,9 +9,9 @@ on:
         type: choice
         options:
           - plan-all
-          - apply-state-1
-          - apply-state-2
-          - apply-state-3
+          - apply-stage-1
+          - apply-stage-2
+          - apply-stage-3
           - destroy-all
       confirm_destroy:
         description: 'Type DESTROY to confirm destruction'
@@ -29,10 +29,10 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
@@ -56,13 +56,11 @@ jobs:
           GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
-          ARC_GITHUB_APP_ID: ${{ secrets.ARC_GITHUB_APP_ID }}
-          ARC_GITHUB_APP_INSTALLATION_ID: ${{ secrets.ARC_GITHUB_APP_INSTALLATION_ID }}
-          ARC_GITHUB_APP_PRIVATE_KEY: ${{ secrets.ARC_GITHUB_APP_PRIVATE_KEY }}
+          INFRA_GH_TOKEN: ${{ secrets.INFRA_GH_TOKEN }}
         run: terragrunt run-all plan
 
-      - name: Apply State 1
-        if: inputs.action == 'apply-state-1'
+      - name: Apply Stage 1
+        if: inputs.action == 'apply-stage-1'
         working-directory: infrastructure/live/prod/1-cloudspace
         env:
           GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
@@ -70,8 +68,8 @@ jobs:
           RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
         run: terragrunt apply -auto-approve
 
-      - name: Apply State 2
-        if: inputs.action == 'apply-state-2'
+      - name: Apply Stage 2
+        if: inputs.action == 'apply-stage-2'
         working-directory: infrastructure/live/prod/2-cluster-base
         env:
           GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
@@ -79,16 +77,14 @@ jobs:
           RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
         run: terragrunt apply -auto-approve
 
-      - name: Apply State 3
-        if: inputs.action == 'apply-state-3'
+      - name: Apply Stage 3
+        if: inputs.action == 'apply-stage-3'
         working-directory: infrastructure/live/prod/3-argocd-apps
         env:
           GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
-          ARC_GITHUB_APP_ID: ${{ secrets.ARC_GITHUB_APP_ID }}
-          ARC_GITHUB_APP_INSTALLATION_ID: ${{ secrets.ARC_GITHUB_APP_INSTALLATION_ID }}
-          ARC_GITHUB_APP_PRIVATE_KEY: ${{ secrets.ARC_GITHUB_APP_PRIVATE_KEY }}
+          INFRA_GH_TOKEN: ${{ secrets.INFRA_GH_TOKEN }}
         run: terragrunt apply -auto-approve
 
       - name: Destroy All
@@ -98,15 +94,13 @@ jobs:
           GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
-          ARC_GITHUB_APP_ID: ${{ secrets.ARC_GITHUB_APP_ID }}
-          ARC_GITHUB_APP_INSTALLATION_ID: ${{ secrets.ARC_GITHUB_APP_INSTALLATION_ID }}
-          ARC_GITHUB_APP_PRIVATE_KEY: ${{ secrets.ARC_GITHUB_APP_PRIVATE_KEY }}
+          INFRA_GH_TOKEN: ${{ secrets.INFRA_GH_TOKEN }}
         run: terragrunt run-all destroy -auto-approve
 
       - name: Destroy Rejected
         if: inputs.action == 'destroy-all' && inputs.confirm_destroy != 'DESTROY'
         run: |
-          echo "❌ Destroy rejected - confirmation text did not match"
+          echo "Destroy rejected - confirmation text did not match"
           echo "Expected: DESTROY"
           echo "Got: ${{ inputs.confirm_destroy }}"
           exit 1

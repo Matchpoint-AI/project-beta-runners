@@ -5,11 +5,13 @@ on:
     branches: [main]
     paths:
       - 'infrastructure/**'
+      - 'argocd/**'
       - '.github/workflows/deploy.yml'
   pull_request:
     branches: [main]
     paths:
       - 'infrastructure/**'
+      - 'argocd/**'
       - '.github/workflows/deploy.yml'
 
 env:
@@ -27,7 +29,7 @@ jobs:
       contents: read
       id-token: write
       pull-requests: write
-    
+
     steps:
       - uses: actions/checkout@v4
 
@@ -54,9 +56,7 @@ jobs:
           GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
-          ARC_GITHUB_APP_ID: ${{ secrets.ARC_GITHUB_APP_ID }}
-          ARC_GITHUB_APP_INSTALLATION_ID: ${{ secrets.ARC_GITHUB_APP_INSTALLATION_ID }}
-          ARC_GITHUB_APP_PRIVATE_KEY: ${{ secrets.ARC_GITHUB_APP_PRIVATE_KEY }}
+          INFRA_GH_TOKEN: ${{ secrets.INFRA_GH_TOKEN }}
         run: |
           terragrunt run-all plan -no-color 2>&1 | tee plan.txt
           echo "output<<EOF" >> $GITHUB_OUTPUT
@@ -71,20 +71,20 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `#### Terragrunt Plan 📖\n<details><summary>Show Plan</summary>\n\n\`\`\`\n${{ steps.plan.outputs.output }}\n\`\`\`\n</details>`
+              body: `#### Terragrunt Plan\n<details><summary>Show Plan</summary>\n\n\`\`\`\n${{ steps.plan.outputs.output }}\n\`\`\`\n</details>`
             });
 
   # ==========================================================================
   # APPLY (main only)
   # ==========================================================================
-  apply-state-1:
+  apply-stage-1:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
       contents: read
       id-token: write
-    
+
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
@@ -100,7 +100,7 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-      - name: Apply State 1 (Cloudspace)
+      - name: Apply Stage 1 (Cloudspace)
         working-directory: infrastructure/live/prod/1-cloudspace
         env:
           GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
@@ -108,14 +108,14 @@ jobs:
           RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
         run: terragrunt apply -auto-approve
 
-  apply-state-2:
-    needs: apply-state-1
+  apply-stage-2:
+    needs: apply-stage-1
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read
       id-token: write
-    
+
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
@@ -131,7 +131,7 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-      - name: Apply State 2 (Cluster Base)
+      - name: Apply Stage 2 (Cluster Base)
         working-directory: infrastructure/live/prod/2-cluster-base
         env:
           GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
@@ -139,14 +139,14 @@ jobs:
           RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
         run: terragrunt apply -auto-approve
 
-  apply-state-3:
-    needs: apply-state-2
+  apply-stage-3:
+    needs: apply-stage-2
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
       id-token: write
-    
+
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
@@ -162,19 +162,17 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-      - name: Apply State 3 (ArgoCD Apps)
+      - name: Apply Stage 3 (ArgoCD Apps)
         working-directory: infrastructure/live/prod/3-argocd-apps
         env:
           GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
-          ARC_GITHUB_APP_ID: ${{ secrets.ARC_GITHUB_APP_ID }}
-          ARC_GITHUB_APP_INSTALLATION_ID: ${{ secrets.ARC_GITHUB_APP_INSTALLATION_ID }}
-          ARC_GITHUB_APP_PRIVATE_KEY: ${{ secrets.ARC_GITHUB_APP_PRIVATE_KEY }}
+          INFRA_GH_TOKEN: ${{ secrets.INFRA_GH_TOKEN }}
         run: terragrunt apply -auto-approve
 
   verify:
-    needs: apply-state-3
+    needs: apply-stage-3
     runs-on: ubuntu-latest
     steps:
       - uses: actions/github-script@v7
