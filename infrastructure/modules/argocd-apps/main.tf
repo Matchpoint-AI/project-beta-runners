@@ -1,6 +1,10 @@
 # ArgoCD Apps Module
 #
-# Deploys ARC controller and runner ScaleSet.
+# Creates the bootstrap ArgoCD Application that manages ARC deployment.
+# This follows the "App of Apps" GitOps pattern:
+# - Terraform creates namespaces and secrets
+# - Terraform applies bootstrap Application CRD
+# - ArgoCD syncs and manages ARC controller + runners from repo manifests
 
 terraform {
   required_version = ">= 1.5.0"
@@ -10,20 +14,17 @@ terraform {
       source  = "hashicorp/kubernetes"
       version = ">= 2.23.0"
     }
-    helm = {
-      source  = "hashicorp/helm"
-      version = ">= 2.11.0"
-    }
   }
 }
 
 locals {
   arc_namespace    = "arc-systems"
   runner_namespace = "arc-runners"
+  argocd_namespace = "argocd"
 }
 
 # -----------------------------------------------------------------------------
-# ARC System Namespace
+# ARC System Namespace (for controller)
 # -----------------------------------------------------------------------------
 resource "kubernetes_namespace" "arc_systems" {
   metadata {
@@ -32,7 +33,7 @@ resource "kubernetes_namespace" "arc_systems" {
 }
 
 # -----------------------------------------------------------------------------
-# ARC Runners Namespace
+# ARC Runners Namespace (for runner pods)
 # -----------------------------------------------------------------------------
 resource "kubernetes_namespace" "arc_runners" {
   metadata {
@@ -43,6 +44,7 @@ resource "kubernetes_namespace" "arc_runners" {
 # -----------------------------------------------------------------------------
 # GitHub Token Secret for Runner Registration
 # Uses PAT with admin:org and manage_runners:org scopes
+# This must exist before ArgoCD syncs the runner Application
 # -----------------------------------------------------------------------------
 resource "kubernetes_secret" "github_token" {
   metadata {
@@ -58,81 +60,48 @@ resource "kubernetes_secret" "github_token" {
 }
 
 # -----------------------------------------------------------------------------
-# ARC Controller (gha-runner-scale-set-controller)
+# Bootstrap ArgoCD Application
+# This creates an Application that points to argocd/applications/ in this repo.
+# ArgoCD will then sync and manage:
+# - arc-controller (ARC controller Helm chart)
+# - arc-runners (ARC runner scale set Helm chart)
 # -----------------------------------------------------------------------------
-resource "helm_release" "arc_controller" {
-  name       = "arc-controller"
-  repository = "oci://ghcr.io/actions/actions-runner-controller-charts"
-  chart      = "gha-runner-scale-set-controller"
-  version    = var.arc_version
-  namespace  = local.arc_namespace
-
-  wait    = true
-  timeout = 300
-
-  depends_on = [kubernetes_namespace.arc_systems]
-}
-
-# -----------------------------------------------------------------------------
-# ARC Runner ScaleSet
-# -----------------------------------------------------------------------------
-resource "helm_release" "arc_runners" {
-  name       = "arc-runners"
-  repository = "oci://ghcr.io/actions/actions-runner-controller-charts"
-  chart      = "gha-runner-scale-set"
-  version    = var.arc_version
-  namespace  = local.runner_namespace
-
-  wait    = true
-  timeout = 300
-
-  # All configuration via values block for helm provider compatibility
-  values = [yamlencode({
-    # GitHub configuration
-    githubConfigUrl    = "https://github.com/${var.github_org}"
-    githubConfigSecret = kubernetes_secret.github_token.metadata[0].name
-
-    # Runner label (this is what workflows use: runs-on: project-beta-runners)
-    runnerScaleSetName = var.runner_label
-
-    # Autoscaling
-    minRunners = var.min_runners
-    maxRunners = var.max_runners
-
-    # Controller namespace reference
-    controllerServiceAccount = {
-      namespace = local.arc_namespace
-      name      = "arc-controller-gha-rs-controller"
+resource "kubernetes_manifest" "bootstrap_application" {
+  manifest = {
+    apiVersion = "argoproj.io/v1alpha1"
+    kind       = "Application"
+    metadata = {
+      name      = "project-beta-runners-bootstrap"
+      namespace = local.argocd_namespace
+      finalizers = [
+        "resources-finalizer.argocd.argoproj.io"
+      ]
     }
-
-    # Runner pod template with DinD sidecar
-    template = {
-      spec = {
-        containers = [
-          {
-            name  = "runner"
-            image = "ghcr.io/actions/actions-runner:latest"
-            env = [
-              { name = "DOCKER_HOST", value = "tcp://localhost:2375" },
-              { name = "DOCKER_API_VERSION", value = "1.43" }
-            ]
-            securityContext = { runAsUser = 1000 }
-          },
-          {
-            name            = "dind"
-            image           = "docker:24-dind"
-            securityContext = { privileged = true }
-            env             = [{ name = "DOCKER_TLS_CERTDIR", value = "" }]
-            volumeMounts    = [{ name = "dind-storage", mountPath = "/var/lib/docker" }]
-          }
+    spec = {
+      project = "default"
+      source = {
+        repoURL        = var.repo_url
+        targetRevision = var.target_revision
+        path           = "argocd/applications"
+      }
+      destination = {
+        server    = "https://kubernetes.default.svc"
+        namespace = local.argocd_namespace
+      }
+      syncPolicy = {
+        automated = {
+          prune    = true
+          selfHeal = true
+        }
+        syncOptions = [
+          "CreateNamespace=true"
         ]
-        volumes = [{ name = "dind-storage", emptyDir = { sizeLimit = "20Gi" } }]
       }
     }
-  })]
+  }
 
   depends_on = [
-    helm_release.arc_controller,
+    kubernetes_namespace.arc_systems,
     kubernetes_namespace.arc_runners,
     kubernetes_secret.github_token
   ]

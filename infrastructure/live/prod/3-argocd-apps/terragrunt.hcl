@@ -1,7 +1,12 @@
 # Stage 3: ArgoCD Apps
 #
-# Deploys ARC controller and runner ScaleSet.
-# This is the fastest operation (2-5 minutes).
+# Creates the bootstrap ArgoCD Application that manages ARC deployment.
+# This follows the "App of Apps" GitOps pattern:
+# - Terraform creates namespaces and secrets
+# - Terraform applies bootstrap Application CRD
+# - ArgoCD syncs and manages ARC controller + runners from repo manifests
+#
+# This is the fastest operation (1-2 minutes).
 
 include "root" {
   path = find_in_parent_folders("root.hcl")
@@ -12,7 +17,7 @@ terraform {
   source = "${get_parent_terragrunt_dir()}/../modules/argocd-apps"
 }
 
-# Dependency on Stage 2 - Cluster must be ready
+# Dependency on Stage 2 - ArgoCD must be installed
 dependency "cluster_base" {
   config_path = "../2-cluster-base"
 
@@ -24,16 +29,11 @@ dependency "cluster_base" {
   mock_outputs_allowed_terraform_commands = ["validate", "plan"]
 }
 
-# Load environment-specific variables
-locals {
-  env_vars = read_terragrunt_config(find_in_parent_folders("env-vars/prod.hcl"))
-}
-
 inputs = {
-  runner_label = local.env_vars.locals.runner_label
-  min_runners  = local.env_vars.locals.min_runners
-  max_runners  = local.env_vars.locals.max_runners
-  arc_version  = local.env_vars.locals.arc_version
-  github_org   = local.env_vars.locals.github_org
+  # GitHub PAT for runner registration
   github_token = get_env("INFRA_GH_TOKEN", "")
+
+  # ArgoCD sync configuration
+  repo_url        = "https://github.com/Matchpoint-AI/project-beta-runners"
+  target_revision = "main"
 }

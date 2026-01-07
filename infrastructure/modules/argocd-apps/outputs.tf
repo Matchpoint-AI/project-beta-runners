@@ -1,8 +1,8 @@
 # ArgoCD Apps Module - Outputs
 
-output "runner_label" {
-  description = "GitHub Actions runner label for workflows"
-  value       = var.runner_label
+output "bootstrap_application_name" {
+  description = "Name of the bootstrap ArgoCD Application"
+  value       = kubernetes_manifest.bootstrap_application.manifest.metadata.name
 }
 
 output "runner_namespace" {
@@ -15,20 +15,11 @@ output "arc_controller_namespace" {
   value       = local.arc_namespace
 }
 
-output "scaling_config" {
-  description = "Runner autoscaling configuration"
+output "argocd_sync_source" {
+  description = "ArgoCD sync source information"
   value = {
-    min = var.min_runners
-    max = var.max_runners
+    repo_url        = var.repo_url
+    target_revision = var.target_revision
+    path            = "argocd/applications"
   }
-}
-
-output "github_org" {
-  description = "GitHub organization runners are registered to"
-  value       = var.github_org
-}
-
-output "arc_version" {
-  description = "ARC Helm chart version"
-  value       = helm_release.arc_controller.version
 }
