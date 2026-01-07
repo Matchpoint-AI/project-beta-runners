@@ -1,6 +1,11 @@
 # Cloudspace Module
 #
-# Creates Rackspace Spot managed Kubernetes cluster and node pool.
+# Creates a Rackspace Spot managed Kubernetes cluster and node pool.
+# Control plane provisioning typically takes 50-60 minutes for new clusters.
+#
+# Key behavior:
+# - spotctl writes kubeconfig to ~/.kube/<cluster>.yaml (not configurable path)
+# - We copy from there to the module directory for terraform to read
 
 terraform {
   required_version = ">= 1.5.0"
@@ -13,6 +18,10 @@ terraform {
   }
 }
 
+# -----------------------------------------------------------------------------
+# Provider Configuration
+# -----------------------------------------------------------------------------
+
 provider "spot" {
   token = var.rackspace_spot_token
 }
@@ -23,6 +32,10 @@ variable "rackspace_spot_token" {
   sensitive   = true
 }
 
+# -----------------------------------------------------------------------------
+# Cloudspace (Kubernetes Cluster)
+# -----------------------------------------------------------------------------
+
 resource "spot_cloudspace" "this" {
   cloudspace_name  = var.cluster_name
   region           = var.region
@@ -32,6 +45,10 @@ resource "spot_cloudspace" "this" {
     ignore_changes = [wait_until_ready]
   }
 }
+
+# -----------------------------------------------------------------------------
+# Node Pool
+# -----------------------------------------------------------------------------
 
 resource "spot_spotnodepool" "this" {
   cloudspace_name = spot_cloudspace.this.cloudspace_name
@@ -45,6 +62,12 @@ resource "spot_spotnodepool" "this" {
 
   depends_on = [spot_cloudspace.this]
 }
+
+# -----------------------------------------------------------------------------
+# spotctl Configuration
+# -----------------------------------------------------------------------------
+# Sets up ~/.spot_config for CLI authentication.
+# Also installs spotctl binary if not present.
 
 resource "terraform_data" "setup_spotctl_config" {
   triggers_replace = [spot_cloudspace.this.id]
@@ -69,6 +92,12 @@ resource "terraform_data" "setup_spotctl_config" {
   depends_on = [spot_spotnodepool.this]
 }
 
+# -----------------------------------------------------------------------------
+# Wait for Cluster Ready
+# -----------------------------------------------------------------------------
+# Polls cloudspace status until Ready, then verifies kubeconfig is available.
+# Max wait: 240 attempts * 30s = 2 hours
+
 resource "terraform_data" "wait_for_cluster" {
   triggers_replace = [terraform_data.setup_spotctl_config.id]
 
@@ -81,7 +110,7 @@ resource "terraform_data" "wait_for_cluster" {
       SLEEP_INTERVAL=30
       SPOTCTL=$(command -v spotctl || echo "/tmp/spotctl")
       
-      echo "Waiting for cloudspace $CLUSTER_NAME..."
+      echo "Waiting for cloudspace $CLUSTER_NAME (max 2 hours)..."
       
       for i in $(seq 1 $MAX_ATTEMPTS); do
         if STATUS_JSON=$($SPOTCTL cloudspaces get --name "$CLUSTER_NAME" --output json 2>&1); then
@@ -89,19 +118,19 @@ resource "terraform_data" "wait_for_cluster" {
           
           case "$STATUS" in
             "Ready"|"Healthy"|"Running"|"Active")
-              echo "Cloudspace ready. Fetching kubeconfig..."
+              echo "✅ Cloudspace ready. Fetching kubeconfig..."
               $SPOTCTL cloudspaces get-config --name "$CLUSTER_NAME"
               if [ -s "$KUBECONFIG_PATH" ] && grep -q "server:" "$KUBECONFIG_PATH"; then
-                echo "Kubeconfig verified at $KUBECONFIG_PATH"
+                echo "✅ Kubeconfig verified at $KUBECONFIG_PATH"
                 exit 0
               fi
-              echo "Kubeconfig not available yet, retrying..."
+              echo "⏳ Kubeconfig not available yet, retrying..."
               ;;
             "Provisioning"|"Creating"|"Pending")
               echo "[$i/$MAX_ATTEMPTS] Status: $STATUS"
               ;;
             "Failed"|"Error"|"Degraded")
-              echo "Cloudspace failed: $STATUS"
+              echo "❌ Cloudspace failed: $STATUS"
               exit 1
               ;;
           esac
@@ -109,13 +138,19 @@ resource "terraform_data" "wait_for_cluster" {
         sleep $SLEEP_INTERVAL
       done
       
-      echo "Timeout waiting for cloudspace"
+      echo "❌ Timeout waiting for cloudspace"
       exit 1
     EOT
   }
 
   depends_on = [terraform_data.setup_spotctl_config]
 }
+
+# -----------------------------------------------------------------------------
+# Kubeconfig Fetch
+# -----------------------------------------------------------------------------
+# Fetches kubeconfig via spotctl and copies to module directory.
+# Note: spotctl always writes to ~/.kube/<cluster>.yaml regardless of --file flag
 
 resource "terraform_data" "fetch_kubeconfig" {
   triggers_replace = [timestamp()]
@@ -128,13 +163,14 @@ resource "terraform_data" "fetch_kubeconfig" {
       DEST_PATH="${path.module}/kubeconfig.yaml"
       SPOTCTL=$(command -v spotctl || echo "/tmp/spotctl")
       
+      echo "Fetching kubeconfig for $CLUSTER_NAME..."
       $SPOTCTL cloudspaces get-config --name "$CLUSTER_NAME"
       
       if [ -s "$SRC_PATH" ]; then
         cp "$SRC_PATH" "$DEST_PATH"
-        echo "Kubeconfig copied to $DEST_PATH"
+        echo "✅ Kubeconfig copied to $DEST_PATH"
       else
-        echo "Failed to fetch kubeconfig"
+        echo "❌ Failed to fetch kubeconfig"
         exit 1
       fi
     EOT
@@ -142,6 +178,10 @@ resource "terraform_data" "fetch_kubeconfig" {
 
   depends_on = [terraform_data.wait_for_cluster]
 }
+
+# -----------------------------------------------------------------------------
+# Kubeconfig Output
+# -----------------------------------------------------------------------------
 
 data "local_file" "kubeconfig" {
   filename   = "${path.module}/kubeconfig.yaml"
