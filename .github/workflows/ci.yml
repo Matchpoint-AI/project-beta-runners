@@ -140,12 +140,9 @@ jobs:
           INFRA_GH_TOKEN: ${{ secrets.INFRA_GH_TOKEN }}
         run: |
           set +e
-          # Skip stages that require live cluster API:
-          # - 2-cluster-base: requires kubeconfig for helm/kubernetes providers
-          # - 3-argocd-apps: kubernetes_manifest requires live cluster API
-          # Note: 1-cloudspace is now plannable since we fetch kubeconfig via spotctl
+          # Skip 3-argocd-apps which requires kubernetes_manifest on live cluster
+          # Stages 1-cloudspace and 2-cluster-base are now plannable with kubeconfig
           terragrunt run-all plan -no-color \
-            --terragrunt-exclude-dir 2-cluster-base \
             --terragrunt-exclude-dir 3-argocd-apps 2>&1 | tee plan.txt
           exitcode=${PIPESTATUS[0]}
           echo "exitcode=$exitcode" >> $GITHUB_OUTPUT
