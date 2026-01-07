@@ -56,7 +56,6 @@ jobs:
           RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
           RACKSPACE_ORG: ${{ secrets.RACKSPACE_ORG }}
         run: |
-          # Create config file at ~/.spot_config in YAML format
           cat > ~/.spot_config << EOF
           org: "${RACKSPACE_ORG}"
           refreshToken: "${RACKSPACE_SPOT_TOKEN}"
