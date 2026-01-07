@@ -225,14 +225,49 @@ resource "terraform_data" "wait_for_cluster" {
 }
 
 # -----------------------------------------------------------------------------
-# Kubeconfig Data Source
+# Dynamic Kubeconfig Fetch (fresh every apply via spotctl)
 # -----------------------------------------------------------------------------
-data "spot_kubeconfig" "this" {
-  cloudspace_name = spot_cloudspace.this.cloudspace_name
+# Uses local-exec to fetch kubeconfig dynamically instead of provider data source.
+# This ensures fresh kubeconfig is fetched every apply, not cached in state.
+resource "terraform_data" "fetch_kubeconfig" {
+  # Always fetch fresh kubeconfig on every apply
+  triggers_replace = [timestamp()]
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      set -e
+      CLUSTER_NAME="${var.cluster_name}"
+      KUBECONFIG_PATH="${path.module}/kubeconfig.yaml"
+      
+      # Use spotctl from PATH or /tmp
+      if command -v spotctl &> /dev/null; then
+        SPOTCTL="spotctl"
+      else
+        SPOTCTL="/tmp/spotctl"
+      fi
+      
+      echo "Fetching fresh kubeconfig for $CLUSTER_NAME..."
+      $SPOTCTL cloudspaces get-config --name "$CLUSTER_NAME" --file "$KUBECONFIG_PATH"
+      
+      if [ -s "$KUBECONFIG_PATH" ]; then
+        echo "✅ Kubeconfig saved to $KUBECONFIG_PATH ($(wc -c < "$KUBECONFIG_PATH") bytes)"
+      else
+        echo "❌ Failed to fetch kubeconfig"
+        exit 1
+      fi
+    EOT
+  }
 
   depends_on = [terraform_data.wait_for_cluster]
 }
 
+# Read the dynamically fetched kubeconfig
+data "local_file" "kubeconfig" {
+  filename = "${path.module}/kubeconfig.yaml"
+  
+  depends_on = [terraform_data.fetch_kubeconfig]
+}
+
 locals {
-  kubeconfig = yamldecode(data.spot_kubeconfig.this.raw)
+  kubeconfig = yamldecode(data.local_file.kubeconfig.content)
 }
