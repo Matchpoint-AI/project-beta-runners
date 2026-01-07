@@ -87,47 +87,26 @@ resource "helm_release" "arc_runners" {
   wait    = true
   timeout = 300
 
-  # GitHub configuration
-  set {
-    name  = "githubConfigUrl"
-    value = "https://github.com/${var.github_org}"
-  }
-
-  set {
-    name  = "githubConfigSecret"
-    value = kubernetes_secret.github_app.metadata[0].name
-  }
-
-  # Runner label (this is what workflows use: runs-on: project-beta-runners)
-  set {
-    name  = "runnerScaleSetName"
-    value = var.runner_label
-  }
-
-  # Autoscaling
-  set {
-    name  = "minRunners"
-    value = var.min_runners
-  }
-
-  set {
-    name  = "maxRunners"
-    value = var.max_runners
-  }
-
-  # Controller namespace reference
-  set {
-    name  = "controllerServiceAccount.namespace"
-    value = local.arc_namespace
-  }
-
-  set {
-    name  = "controllerServiceAccount.name"
-    value = "arc-controller-gha-rs-controller"
-  }
-
-  # Runner pod template with DinD sidecar
+  # All configuration via values block for helm provider compatibility
   values = [yamlencode({
+    # GitHub configuration
+    githubConfigUrl    = "https://github.com/${var.github_org}"
+    githubConfigSecret = kubernetes_secret.github_app.metadata[0].name
+
+    # Runner label (this is what workflows use: runs-on: project-beta-runners)
+    runnerScaleSetName = var.runner_label
+
+    # Autoscaling
+    minRunners = var.min_runners
+    maxRunners = var.max_runners
+
+    # Controller namespace reference
+    controllerServiceAccount = {
+      namespace = local.arc_namespace
+      name      = "arc-controller-gha-rs-controller"
+    }
+
+    # Runner pod template with DinD sidecar
     template = {
       spec = {
         containers = [
