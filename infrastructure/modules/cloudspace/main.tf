@@ -64,27 +64,103 @@ resource "spot_spotnodepool" "this" {
 }
 
 # -----------------------------------------------------------------------------
-# Wait for Cluster to be Ready
+# Wait for Cluster to be Ready (using spotctl for status visibility)
 # -----------------------------------------------------------------------------
 # The spot_cloudspace.wait_until_ready may timeout before cluster is fully ready.
-# This resource polls the cluster status until it's no longer "Provisioning".
+# This resource uses spotctl to poll with actual status visibility.
 resource "terraform_data" "wait_for_cluster" {
   triggers_replace = [spot_cloudspace.this.id]
 
   provisioner "local-exec" {
     command = <<-EOT
-      echo "Waiting for cloudspace ${var.cluster_name} to be ready..."
-      for i in $(seq 1 240); do
-        # Check if kubeconfig is available (indicates cluster is ready)
-        if curl -sf -H "Authorization: Bearer $RACKSPACE_SPOT_TOKEN" \
-           "https://spot.rackspace.com/v1/cloudspaces/${var.cluster_name}/kubeconfig" > /dev/null 2>&1; then
-          echo "Cloudspace ${var.cluster_name} is ready!"
-          exit 0
+      set -e
+      
+      CLUSTER_NAME="${var.cluster_name}"
+      ORG="${var.rackspace_org}"
+      MAX_ATTEMPTS=240
+      SLEEP_INTERVAL=30
+      
+      echo "=============================================="
+      echo "Waiting for cloudspace $CLUSTER_NAME to be ready"
+      echo "Organization: $ORG"
+      echo "Max wait time: $((MAX_ATTEMPTS * SLEEP_INTERVAL / 60)) minutes"
+      echo "=============================================="
+      
+      # Configure spotctl
+      cat > ~/.spot_config << EOF
+      org: "$ORG"
+      refreshToken: "$RACKSPACE_SPOT_TOKEN"
+      region: "${var.region}"
+      EOF
+      chmod 600 ~/.spot_config
+      
+      # Check if spotctl is available, fall back to curl if not
+      if ! command -v spotctl &> /dev/null; then
+        echo "spotctl not found, installing..."
+        curl -sL "https://github.com/rackspace-spot/spotctl/releases/download/v0.1.1/spotctl-linux-amd64" -o /tmp/spotctl
+        chmod +x /tmp/spotctl
+        SPOTCTL="/tmp/spotctl"
+      else
+        SPOTCTL="spotctl"
+      fi
+      
+      for i in $(seq 1 $MAX_ATTEMPTS); do
+        # Get cloudspace status using spotctl
+        if STATUS_JSON=$($SPOTCTL cloudspaces get "$CLUSTER_NAME" --output json 2>&1); then
+          STATUS=$(echo "$STATUS_JSON" | jq -r '.status // "Unknown"')
+          
+          case "$STATUS" in
+            "Ready"|"Running"|"Active")
+              echo ""
+              echo "=============================================="
+              echo "✅ Cloudspace $CLUSTER_NAME is READY!"
+              echo "Status: $STATUS"
+              echo "=============================================="
+              
+              # Verify kubeconfig is accessible
+              if $SPOTCTL cloudspaces get-config "$CLUSTER_NAME" --file /tmp/kubeconfig-test 2>/dev/null; then
+                echo "✅ Kubeconfig verified accessible"
+                rm -f /tmp/kubeconfig-test
+                exit 0
+              else
+                echo "⚠️  Status is Ready but kubeconfig not yet accessible, continuing to wait..."
+              fi
+              ;;
+            "Provisioning"|"Creating"|"Pending")
+              ELAPSED=$((i * SLEEP_INTERVAL / 60))
+              echo "[$i/$MAX_ATTEMPTS] Status: $STATUS (elapsed: ${ELAPSED}m)"
+              ;;
+            "Failed"|"Error"|"Degraded")
+              echo ""
+              echo "=============================================="
+              echo "❌ Cloudspace $CLUSTER_NAME is in $STATUS state!"
+              echo "Full status:"
+              echo "$STATUS_JSON" | jq '.'
+              echo ""
+              echo "To recover, delete and recreate:"
+              echo "  spotctl cloudspaces delete --name $CLUSTER_NAME"
+              echo "=============================================="
+              exit 1
+              ;;
+            *)
+              echo "[$i/$MAX_ATTEMPTS] Unknown status: $STATUS"
+              ;;
+          esac
+        else
+          echo "[$i/$MAX_ATTEMPTS] Could not fetch status (cluster may still be initializing)"
         fi
-        echo "Attempt $i/240: Cluster still provisioning, waiting 30s..."
-        sleep 30
+        
+        sleep $SLEEP_INTERVAL
       done
-      echo "ERROR: Timed out waiting for cloudspace to be ready after 120 minutes"
+      
+      echo ""
+      echo "=============================================="
+      echo "❌ TIMEOUT: Cloudspace did not become ready in $((MAX_ATTEMPTS * SLEEP_INTERVAL / 60)) minutes"
+      echo "Last known status: $STATUS"
+      echo ""
+      echo "Check status manually:"
+      echo "  spotctl cloudspaces get $CLUSTER_NAME --output json"
+      echo "=============================================="
       exit 1
     EOT
 
