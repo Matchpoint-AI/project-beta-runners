@@ -8,9 +8,6 @@ name: Force Unlock State
 on:
   workflow_dispatch:
     inputs:
-      lock_id:
-        description: 'Lock ID to unlock (from error message)'
-        required: true
       stage:
         description: 'Stage to unlock'
         required: true
@@ -23,10 +20,6 @@ on:
       confirm:
         description: 'Type "UNLOCK" to confirm'
         required: true
-
-env:
-  OPENTOFU_VERSION: "1.8.0"
-  TERRAGRUNT_VERSION: "0.54.0"
 
 jobs:
   unlock:
@@ -46,46 +39,36 @@ jobs:
           fi
           echo "✅ Confirmation received"
 
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup OpenTofu
-        uses: opentofu/setup-opentofu@v1
-        with:
-          tofu_version: ${{ env.OPENTOFU_VERSION }}
-          tofu_wrapper: false
-
-      - name: Setup Terragrunt
-        run: |
-          wget -q https://github.com/gruntwork-io/terragrunt/releases/download/v${{ env.TERRAGRUNT_VERSION }}/terragrunt_linux_amd64
-          chmod +x terragrunt_linux_amd64
-          sudo mv terragrunt_linux_amd64 /usr/local/bin/terragrunt
-
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      - name: Force Unlock
-        working-directory: infrastructure/live/prod/${{ inputs.stage }}
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Delete lock file
         env:
-          GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-          RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
-          TF_IN_AUTOMATION: true
         run: |
+          LOCK_PATH="gs://${GCS_BUCKET}/runners/prod/${{ inputs.stage }}/default.tflock"
+          
           echo "=============================================="
           echo "Force unlocking stage: ${{ inputs.stage }}"
-          echo "Lock ID: ${{ inputs.lock_id }}"
+          echo "Lock path: ${LOCK_PATH}"
           echo "=============================================="
           
-          # Initialize terragrunt to get backend configured
-          terragrunt init --terragrunt-non-interactive
-          
-          # Force unlock
-          tofu force-unlock -force "${{ inputs.lock_id }}"
+          # Check if lock exists
+          if gcloud storage ls "${LOCK_PATH}" 2>/dev/null; then
+            echo "Lock file found. Deleting..."
+            gcloud storage rm "${LOCK_PATH}"
+            echo ""
+            echo "✅ State unlocked successfully!"
+          else
+            echo "No lock file found at ${LOCK_PATH}"
+            echo "The state may already be unlocked."
+          fi
           
           echo ""
-          echo "✅ State unlocked successfully!"
           echo "You can now re-run the deploy workflow."
