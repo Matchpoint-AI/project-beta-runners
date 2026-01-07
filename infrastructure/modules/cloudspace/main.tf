@@ -140,13 +140,14 @@ resource "terraform_data" "wait_for_cluster" {
           # Debug: show raw status on first iteration
           if [ "$i" -eq 1 ]; then
             echo "Raw status from API: $STATUS"
-            echo "Raw JSON: $STATUS_JSON" | head -c 500
+            echo "Raw JSON (truncated):"
+            echo "$STATUS_JSON" | jq -c '.' | head -c 500
             echo ""
           fi
           
           case "$STATUS" in
-            # IMPORTANT: Rackspace API returns "Healthy" for ready clusters
-            "Healthy"|"Ready"|"Running"|"Active")
+            # Rackspace API returns "Ready" for healthy clusters (UI shows "Healthy")
+            "Ready"|"Healthy"|"Running"|"Active")
               echo ""
               echo "=============================================="
               echo "✅ CLOUDSPACE READY!"
@@ -156,14 +157,27 @@ resource "terraform_data" "wait_for_cluster" {
               echo "Elapsed: $${ELAPSED} minutes"
               echo "=============================================="
               
-              # Verify kubeconfig is accessible
-              if $SPOTCTL cloudspaces get-config --name "$CLUSTER_NAME" --file /tmp/kubeconfig-test 2>/dev/null; then
-                echo "✅ Kubeconfig verified"
-                rm -f /tmp/kubeconfig-test
-                exit 0
+              # Verify kubeconfig is accessible using spotctl
+              echo "Fetching kubeconfig via spotctl..."
+              if $SPOTCTL cloudspaces get-config --name "$CLUSTER_NAME" --file /tmp/kubeconfig-test 2>&1; then
+                if [ -s /tmp/kubeconfig-test ]; then
+                  echo "✅ Kubeconfig retrieved successfully"
+                  echo "   Size: $(wc -c < /tmp/kubeconfig-test) bytes"
+                  # Verify it's valid YAML with server endpoint
+                  if grep -q "server:" /tmp/kubeconfig-test; then
+                    echo "✅ Kubeconfig contains server endpoint"
+                    rm -f /tmp/kubeconfig-test
+                    exit 0
+                  else
+                    echo "⚠️  Kubeconfig missing server endpoint, waiting..."
+                  fi
+                else
+                  echo "⚠️  Kubeconfig file is empty, waiting..."
+                fi
               else
-                echo "⚠️  Kubeconfig not yet accessible, waiting..."
+                echo "⚠️  spotctl get-config failed, waiting..."
               fi
+              rm -f /tmp/kubeconfig-test 2>/dev/null
               ;;
             "Provisioning"|"Creating"|"Pending")
               printf "\r[%3d/%d] %-15s | Elapsed: %3dm | Phase: %s" "$i" "$MAX_ATTEMPTS" "$STATUS" "$ELAPSED" "$PHASE"
