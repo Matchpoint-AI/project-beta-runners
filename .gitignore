@@ -2,7 +2,7 @@
 *.tfstate
 *.tfstate.*
 .terraform/
-.terraform.lock.hcl
+# Note: .terraform.lock.hcl files ARE committed for reproducible builds
 *.tfplan
 crash.log
 

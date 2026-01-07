@@ -31,26 +31,10 @@ remote_state {
   }
 }
 
-# Generate provider configuration
-generate "provider" {
-  path      = "provider.tf"
-  if_exists = "overwrite_terragrunt"
-  contents  = <<EOF
-provider "rackspace-spot" {
-  token = var.rackspace_spot_token
-}
-
-variable "rackspace_spot_token" {
-  description = "Rackspace Spot API token"
-  type        = string
-  sensitive   = true
-}
-EOF
-}
-
 # Common inputs for all modules
+# Note: rackspace_spot_token only used by cloudspace module
 inputs = {
-  rackspace_spot_token = get_env("RACKSPACE_SPOT_TOKEN")
+  rackspace_spot_token = get_env("RACKSPACE_SPOT_TOKEN", "")
   cluster_name         = local.cluster_name
   region               = local.region
 }

@@ -9,6 +9,8 @@ on:
 jobs:
   verify:
     # This job runs ON the self-hosted runners to verify they work
+    # Only run if deploy succeeded (or manually triggered)
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: project-beta-runners
     timeout-minutes: 10
     

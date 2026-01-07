@@ -7,17 +7,30 @@ terraform {
   required_version = ">= 1.5.0"
 
   required_providers {
-    rackspace-spot = {
-      source  = "rackerlabs/rackspace-spot"
+    spot = {
+      source  = "rackerlabs/spot"
       version = ">= 0.1.0"
     }
   }
 }
 
 # -----------------------------------------------------------------------------
+# Spot Provider Configuration
+# -----------------------------------------------------------------------------
+provider "spot" {
+  token = var.rackspace_spot_token
+}
+
+variable "rackspace_spot_token" {
+  description = "Rackspace Spot API token"
+  type        = string
+  sensitive   = true
+}
+
+# -----------------------------------------------------------------------------
 # Cloudspace (Kubernetes Cluster)
 # -----------------------------------------------------------------------------
-resource "rackspace-spot_cloudspace" "this" {
+resource "spot_cloudspace" "this" {
   cloudspace_name = var.cluster_name
   region          = var.region
 
@@ -28,18 +41,29 @@ resource "rackspace-spot_cloudspace" "this" {
 # -----------------------------------------------------------------------------
 # Node Pool
 # -----------------------------------------------------------------------------
-resource "rackspace-spot_spotnodepool" "this" {
-  cloudspace_name = rackspace-spot_cloudspace.this.cloudspace_name
+resource "spot_spotnodepool" "this" {
+  cloudspace_name = spot_cloudspace.this.cloudspace_name
   server_class    = var.server_class
+  bid_price       = var.bid_price
 
   # Autoscaling configuration
-  bid_price   = 0.0 # On-demand pricing (no spot bidding)
-  autoscaling = true
-  min_nodes   = var.min_nodes
-  max_nodes   = var.max_nodes
+  autoscaling = {
+    min_nodes = var.min_nodes
+    max_nodes = var.max_nodes
+  }
 
-  # Wait for nodepool to be ready
-  wait_until_ready = true
+  depends_on = [spot_cloudspace.this]
+}
 
-  depends_on = [rackspace-spot_cloudspace.this]
+# -----------------------------------------------------------------------------
+# Kubeconfig Data Source
+# -----------------------------------------------------------------------------
+data "spot_kubeconfig" "this" {
+  cloudspace_name = spot_cloudspace.this.cloudspace_name
+
+  depends_on = [spot_spotnodepool.this]
+}
+
+locals {
+  kubeconfig = yamldecode(data.spot_kubeconfig.this.raw)
 }

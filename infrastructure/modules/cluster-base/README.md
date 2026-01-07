@@ -25,7 +25,7 @@ This module requires the cloudspace to be fully provisioned first.
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5.0 |
 | <a name="requirement_helm"></a> [helm](#requirement\_helm) | >= 2.11.0 |
 | <a name="requirement_kubernetes"></a> [kubernetes](#requirement\_kubernetes) | >= 2.23.0 |
-| <a name="requirement_rackspace-spot"></a> [rackspace-spot](#requirement\_rackspace-spot) | >= 0.1.0 |
+| <a name="requirement_spot"></a> [spot](#requirement\_spot) | >= 0.1.0 |
 
 ## Providers
 
@@ -33,7 +33,7 @@ This module requires the cloudspace to be fully provisioned first.
 |------|---------|
 | <a name="provider_helm"></a> [helm](#provider\_helm) | >= 2.11.0 |
 | <a name="provider_kubernetes"></a> [kubernetes](#provider\_kubernetes) | >= 2.23.0 |
-| <a name="provider_rackspace-spot"></a> [rackspace-spot](#provider\_rackspace-spot) | >= 0.1.0 |
+| <a name="provider_spot"></a> [spot](#provider\_spot) | >= 0.1.0 |
 
 ## Modules
 
@@ -45,7 +45,7 @@ No modules.
 |------|------|
 | [helm_release.argocd](https://registry.terraform.io/providers/hashicorp/helm/latest/docs/resources/release) | resource |
 | [kubernetes_namespace.argocd](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/namespace) | resource |
-| [rackspace-spot_kubeconfig.this](https://registry.terraform.io/providers/rackerlabs/rackspace-spot/latest/docs/data-sources/kubeconfig) | data source |
+| [spot_kubeconfig.this](https://registry.terraform.io/providers/rackerlabs/spot/latest/docs/data-sources/kubeconfig) | data source |
 
 ## Inputs
 
