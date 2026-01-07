@@ -33,14 +33,8 @@ variable "rackspace_spot_token" {
 resource "spot_cloudspace" "this" {
   cloudspace_name = var.cluster_name
   region          = var.region
-
-  # Note: wait_until_ready = true has a built-in timeout that's too short
-  # for the 50-60 minute provisioning time. We use terraform_data.wait_for_cluster
-  # below to ensure the cluster is fully ready before reading kubeconfig.
   wait_until_ready = false
 
-  # Rackspace Spot only allows updating Webhook and KubernetesVersion fields.
-  # Ignore changes to other fields to prevent update errors.
   lifecycle {
     ignore_changes = [wait_until_ready]
   }
@@ -54,7 +48,6 @@ resource "spot_spotnodepool" "this" {
   server_class    = var.server_class
   bid_price       = var.bid_price
 
-  # Autoscaling configuration
   autoscaling = {
     min_nodes = var.min_nodes
     max_nodes = var.max_nodes
@@ -64,25 +57,17 @@ resource "spot_spotnodepool" "this" {
 }
 
 # -----------------------------------------------------------------------------
-# Setup spotctl config (sensitive - output suppressed is OK)
+# Setup spotctl config
 # -----------------------------------------------------------------------------
-# This resource writes the spotctl config file with the sensitive token.
-# Output suppression is expected here since it handles sensitive data.
 resource "terraform_data" "setup_spotctl_config" {
   triggers_replace = [spot_cloudspace.this.id]
 
   provisioner "local-exec" {
     command = <<-EOT
-      # Configure spotctl (sensitive operation)
       mkdir -p ~/.spot
-      cat > ~/.spot_config << EOF
-org: "${var.rackspace_org}"
-refreshToken: "$RACKSPACE_SPOT_TOKEN"
-region: "${var.region}"
-EOF
+      printf 'org: "%s"\nrefreshToken: "%s"\nregion: "%s"\n' "${var.rackspace_org}" "$RACKSPACE_SPOT_TOKEN" "${var.region}" > ~/.spot_config
       chmod 600 ~/.spot_config
       
-      # Install spotctl if not available
       if ! command -v spotctl &> /dev/null; then
         curl -sL "https://github.com/rackspace-spot/spotctl/releases/download/v0.1.1/spotctl-linux-amd64" -o /tmp/spotctl
         chmod +x /tmp/spotctl
@@ -98,125 +83,56 @@ EOF
 }
 
 # -----------------------------------------------------------------------------
-# Wait for Cluster to be Ready (NO sensitive vars - output VISIBLE)
+# Wait for Cluster to be Ready
 # -----------------------------------------------------------------------------
-# This resource polls for cluster status using spotctl.
-# Since it doesn't reference sensitive variables, output will be visible in logs.
 resource "terraform_data" "wait_for_cluster" {
   triggers_replace = [terraform_data.setup_spotctl_config.id]
 
   provisioner "local-exec" {
     command = <<-EOT
       set -e
-      
       CLUSTER_NAME="${var.cluster_name}"
       MAX_ATTEMPTS=240
       SLEEP_INTERVAL=30
       
-      echo ""
-      echo "=============================================="
-      echo "  CLOUDSPACE STATUS MONITOR"
-      echo "=============================================="
-      echo "Cluster: $CLUSTER_NAME"
-      echo "Max wait: $((MAX_ATTEMPTS * SLEEP_INTERVAL / 60)) minutes"
-      echo "=============================================="
-      echo ""
+      echo "Waiting for cloudspace $CLUSTER_NAME (max $((MAX_ATTEMPTS * SLEEP_INTERVAL / 60)) min)..."
       
-      # Use spotctl from PATH or /tmp
-      if command -v spotctl &> /dev/null; then
-        SPOTCTL="spotctl"
-      else
-        SPOTCTL="/tmp/spotctl"
-      fi
+      SPOTCTL=$(command -v spotctl || echo "/tmp/spotctl")
       
       for i in $(seq 1 $MAX_ATTEMPTS); do
         ELAPSED=$((i * SLEEP_INTERVAL / 60))
         
-        # Get cloudspace status using spotctl
         if STATUS_JSON=$($SPOTCTL cloudspaces get --name "$CLUSTER_NAME" --output json 2>&1); then
           STATUS=$(echo "$STATUS_JSON" | jq -r '.status // "Unknown"')
-          PHASE=$(echo "$STATUS_JSON" | jq -r '.phase // ""')
-          
-          # Debug: show raw status on first iteration
-          if [ "$i" -eq 1 ]; then
-            echo "Raw status from API: $STATUS"
-            echo "Raw JSON (truncated):"
-            echo "$STATUS_JSON" | jq -c '.' | head -c 500
-            echo ""
-          fi
           
           case "$STATUS" in
-            # Rackspace API returns "Ready" for healthy clusters (UI shows "Healthy")
             "Ready"|"Healthy"|"Running"|"Active")
-              echo ""
-              echo "=============================================="
-              echo "✅ CLOUDSPACE READY!"
-              echo "=============================================="
-              echo "Cluster: $CLUSTER_NAME"
-              echo "Status:  $STATUS"
-              echo "Elapsed: $${ELAPSED} minutes"
-              echo "=============================================="
-              
-              # Verify kubeconfig is accessible using spotctl
-              echo "Fetching kubeconfig via spotctl..."
+              echo "✅ Cloudspace ready! Verifying kubeconfig..."
               if $SPOTCTL cloudspaces get-config --name "$CLUSTER_NAME" --file /tmp/kubeconfig-test 2>&1; then
-                if [ -s /tmp/kubeconfig-test ]; then
-                  echo "✅ Kubeconfig retrieved successfully"
-                  echo "   Size: $(wc -c < /tmp/kubeconfig-test) bytes"
-                  # Verify it's valid YAML with server endpoint
-                  if grep -q "server:" /tmp/kubeconfig-test; then
-                    echo "✅ Kubeconfig contains server endpoint"
-                    rm -f /tmp/kubeconfig-test
-                    exit 0
-                  else
-                    echo "⚠️  Kubeconfig missing server endpoint, waiting..."
-                  fi
-                else
-                  echo "⚠️  Kubeconfig file is empty, waiting..."
+                if [ -s /tmp/kubeconfig-test ] && grep -q "server:" /tmp/kubeconfig-test; then
+                  echo "✅ Kubeconfig verified"
+                  rm -f /tmp/kubeconfig-test
+                  exit 0
                 fi
-              else
-                echo "⚠️  spotctl get-config failed, waiting..."
               fi
-              rm -f /tmp/kubeconfig-test 2>/dev/null
+              echo "⚠️ Kubeconfig not ready yet..."
               ;;
             "Provisioning"|"Creating"|"Pending")
-              printf "\r[%3d/%d] %-15s | Elapsed: %3dm | Phase: %s" "$i" "$MAX_ATTEMPTS" "$STATUS" "$ELAPSED" "$PHASE"
+              printf "\r[%3d/%d] %s | %dm elapsed" "$i" "$MAX_ATTEMPTS" "$STATUS" "$ELAPSED"
               ;;
             "Failed"|"Error"|"Degraded")
-              echo ""
-              echo "=============================================="
-              echo "❌ CLOUDSPACE FAILED"
-              echo "=============================================="
-              echo "Cluster: $CLUSTER_NAME"
-              echo "Status:  $STATUS"
-              echo ""
-              echo "Full status:"
-              echo "$STATUS_JSON" | jq '.' 2>/dev/null || echo "$STATUS_JSON"
-              echo ""
-              echo "Recovery: spotctl cloudspaces delete --name $CLUSTER_NAME"
-              echo "=============================================="
+              echo "❌ Cloudspace failed: $STATUS"
               exit 1
-              ;;
-            *)
-              # Show unknown status for debugging
-              printf "\r[%3d/%d] %-15s | Elapsed: %3dm (unknown status)" "$i" "$MAX_ATTEMPTS" "$STATUS" "$ELAPSED"
               ;;
           esac
         else
-          printf "\r[%3d/%d] %-15s | Elapsed: %3dm" "$i" "$MAX_ATTEMPTS" "Initializing..." "$ELAPSED"
+          printf "\r[%3d/%d] Initializing... | %dm elapsed" "$i" "$MAX_ATTEMPTS" "$ELAPSED"
         fi
         
         sleep $SLEEP_INTERVAL
       done
       
-      echo ""
-      echo "=============================================="
-      echo "❌ TIMEOUT"
-      echo "=============================================="
-      echo "Cluster did not become ready in $((MAX_ATTEMPTS * SLEEP_INTERVAL / 60)) minutes"
-      echo ""
-      echo "Check manually: spotctl cloudspaces get --name $CLUSTER_NAME"
-      echo "=============================================="
+      echo "❌ Timeout waiting for cloudspace"
       exit 1
     EOT
   }
@@ -225,12 +141,9 @@ resource "terraform_data" "wait_for_cluster" {
 }
 
 # -----------------------------------------------------------------------------
-# Dynamic Kubeconfig Fetch (fresh every apply via spotctl)
+# Dynamic Kubeconfig Fetch
 # -----------------------------------------------------------------------------
-# Uses local-exec to fetch kubeconfig dynamically instead of provider data source.
-# This ensures fresh kubeconfig is fetched every apply, not cached in state.
 resource "terraform_data" "fetch_kubeconfig" {
-  # Always fetch fresh kubeconfig on every apply
   triggers_replace = [timestamp()]
 
   provisioner "local-exec" {
@@ -238,19 +151,13 @@ resource "terraform_data" "fetch_kubeconfig" {
       set -e
       CLUSTER_NAME="${var.cluster_name}"
       KUBECONFIG_PATH="${path.module}/kubeconfig.yaml"
+      SPOTCTL=$(command -v spotctl || echo "/tmp/spotctl")
       
-      # Use spotctl from PATH or /tmp
-      if command -v spotctl &> /dev/null; then
-        SPOTCTL="spotctl"
-      else
-        SPOTCTL="/tmp/spotctl"
-      fi
-      
-      echo "Fetching fresh kubeconfig for $CLUSTER_NAME..."
+      echo "Fetching kubeconfig for $CLUSTER_NAME..."
       $SPOTCTL cloudspaces get-config --name "$CLUSTER_NAME" --file "$KUBECONFIG_PATH"
       
       if [ -s "$KUBECONFIG_PATH" ]; then
-        echo "✅ Kubeconfig saved to $KUBECONFIG_PATH ($(wc -c < "$KUBECONFIG_PATH") bytes)"
+        echo "✅ Kubeconfig saved ($(wc -c < "$KUBECONFIG_PATH") bytes)"
       else
         echo "❌ Failed to fetch kubeconfig"
         exit 1
@@ -261,10 +168,8 @@ resource "terraform_data" "fetch_kubeconfig" {
   depends_on = [terraform_data.wait_for_cluster]
 }
 
-# Read the dynamically fetched kubeconfig
 data "local_file" "kubeconfig" {
-  filename = "${path.module}/kubeconfig.yaml"
-  
+  filename   = "${path.module}/kubeconfig.yaml"
   depends_on = [terraform_data.fetch_kubeconfig]
 }
 
