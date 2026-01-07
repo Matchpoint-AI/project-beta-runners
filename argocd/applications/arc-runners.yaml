@@ -30,49 +30,9 @@ spec:
           namespace: arc-systems
           name: arc-controller-gha-rs-controller
 
-        # Runner pod template with DinD sidecar for Docker support
-        template:
-          spec:
-            initContainers:
-              - name: wait-for-docker
-                image: docker:24-cli
-                command:
-                  - sh
-                  - -c
-                  - |
-                    echo "Waiting for Docker daemon..."
-                    until docker info >/dev/null 2>&1; do
-                      echo "Docker not ready, waiting..."
-                      sleep 1
-                    done
-                    echo "Docker is ready!"
-                env:
-                  - name: DOCKER_HOST
-                    value: tcp://localhost:2375
-            containers:
-              - name: runner
-                image: ghcr.io/actions/actions-runner:latest
-                env:
-                  - name: DOCKER_HOST
-                    value: tcp://localhost:2375
-                  - name: DOCKER_API_VERSION
-                    value: "1.43"
-                securityContext:
-                  runAsUser: 1000
-              - name: dind
-                image: docker:24-dind
-                securityContext:
-                  privileged: true
-                env:
-                  - name: DOCKER_TLS_CERTDIR
-                    value: ""
-                volumeMounts:
-                  - name: dind-storage
-                    mountPath: /var/lib/docker
-            volumes:
-              - name: dind-storage
-                emptyDir:
-                  sizeLimit: 20Gi
+        # Use built-in Docker-in-Docker support from the chart
+        containerMode:
+          type: "dind"
   destination:
     server: https://kubernetes.default.svc
     namespace: arc-runners
