@@ -2,7 +2,7 @@
 
 locals {
   # Cluster settings
-  cluster_name = "mp-runners-v3"
+  cluster_name = "matchpoint-runners"
   region       = "us-central-dfw-1"
   
   # Node pool settings
