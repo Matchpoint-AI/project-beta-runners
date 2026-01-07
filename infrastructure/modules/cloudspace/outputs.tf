@@ -29,9 +29,10 @@ output "node_scaling" {
 }
 
 # Kubeconfig outputs for downstream modules
+# Uses dynamically fetched kubeconfig via spotctl (fresh every apply)
 output "kubeconfig_raw" {
-  description = "Raw kubeconfig YAML"
-  value       = data.spot_kubeconfig.this.raw
+  description = "Raw kubeconfig YAML (fetched fresh via spotctl)"
+  value       = data.local_file.kubeconfig.content
   sensitive   = true
 }
 
