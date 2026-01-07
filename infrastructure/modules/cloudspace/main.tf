@@ -70,7 +70,8 @@ resource "spot_spotnodepool" "this" {
 # Also installs spotctl binary if not present.
 
 resource "terraform_data" "setup_spotctl_config" {
-  input = spot_cloudspace.this.cloudspace_name
+  # triggers_replace forces re-creation (and provisioner re-run) when cloudspace changes
+  triggers_replace = [spot_cloudspace.this.cloudspace_name]
 
   provisioner "local-exec" {
     command = <<-EOT
@@ -99,7 +100,8 @@ resource "terraform_data" "setup_spotctl_config" {
 # Max wait: 240 attempts * 30s = 2 hours
 
 resource "terraform_data" "wait_for_cluster" {
-  input = terraform_data.setup_spotctl_config.output
+  # triggers_replace forces re-creation when upstream resource changes
+  triggers_replace = [terraform_data.setup_spotctl_config.id]
 
   provisioner "local-exec" {
     command = <<-EOT
@@ -154,7 +156,8 @@ resource "terraform_data" "wait_for_cluster" {
 # Note: spotctl always writes to ~/.kube/<cluster>.yaml regardless of --file flag
 
 resource "terraform_data" "fetch_kubeconfig" {
-  input = terraform_data.wait_for_cluster.output
+  # triggers_replace forces re-creation when upstream resource changes
+  triggers_replace = [terraform_data.wait_for_cluster.id]
 
   provisioner "local-exec" {
     command = <<-EOT

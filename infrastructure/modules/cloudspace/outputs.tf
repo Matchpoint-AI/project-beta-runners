@@ -10,9 +10,9 @@ output "region" {
   value       = spot_cloudspace.this.region
 }
 
-output "nodepool_id" {
-  description = "ID of the node pool"
-  value       = spot_spotnodepool.this.id
+output "nodepool_name" {
+  description = "Name of the node pool"
+  value       = spot_spotnodepool.this.name
 }
 
 output "server_class" {
