@@ -1,23 +1,16 @@
 # Terraform
 *.tfstate
 *.tfstate.*
-*.tfplan
 .terraform/
 .terraform.lock.hcl
+*.tfplan
 crash.log
-override.tf
-override.tf.json
-*_override.tf
-*_override.tf.json
-*.auto.tfvars
 
-# Local .terraform directories
-**/.terraform/*
+# Terragrunt
+.terragrunt-cache/
 
-# Secrets (never commit)
-*.pem
-*.key
-secrets.auto.tfvars
+# Kubeconfig (generated)
+kubeconfig*.yaml
 
 # IDE
 .idea/
@@ -25,14 +18,11 @@ secrets.auto.tfvars
 *.swp
 *.swo
 
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-.env
-venv/
-.venv/
-
 # OS
 .DS_Store
 Thumbs.db
+
+# Secrets (never commit)
+*.pem
+*.key
+secrets.tfvars
