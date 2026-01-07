@@ -10,6 +10,12 @@ variable "region" {
   type        = string
 }
 
+variable "rackspace_org" {
+  description = "Rackspace Spot organization ID for spotctl"
+  type        = string
+  default     = "matchpoint-ai"
+}
+
 variable "server_class" {
   description = "Node pool server class (e.g., gp.vs1.xlarge-dfw = 8 vCPU, 30GB RAM in DFW)"
   type        = string
