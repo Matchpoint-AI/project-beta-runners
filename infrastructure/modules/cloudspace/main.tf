@@ -66,26 +66,48 @@ resource "spot_spotnodepool" "this" {
 # -----------------------------------------------------------------------------
 # Setup spotctl config (sensitive - output suppressed is OK)
 # -----------------------------------------------------------------------------
-# This resource writes the spotctl config file with the sensitive token.
-# Output suppression is expected here since it handles sensitive data.
+# IMPORTANT: Uses /tmp/.spot_config (absolute path) to ensure consistency
+# across all terraform resources that use spotctl.
 resource "terraform_data" "setup_spotctl_config" {
   triggers_replace = [spot_cloudspace.this.id]
 
   provisioner "local-exec" {
     command = <<-EOT
-      # Configure spotctl (sensitive operation)
-      mkdir -p ~/.spot
+      set -e
+      
+      # Use absolute path to ensure all resources can find it
+      CONFIG_PATH="/tmp/.spot_config"
+      
+      echo "Writing spotctl config to $CONFIG_PATH..."
+      cat > "$CONFIG_PATH" << EOF
+org: "${var.rackspace_org}"
+refreshToken: "$RACKSPACE_SPOT_TOKEN"
+region: "${var.region}"
+EOF
+      chmod 600 "$CONFIG_PATH"
+      
+      # Also write to ~/.spot_config as backup
       cat > ~/.spot_config << EOF
-      org: "${var.rackspace_org}"
-      refreshToken: "$RACKSPACE_SPOT_TOKEN"
-      region: "${var.region}"
-      EOF
+org: "${var.rackspace_org}"
+refreshToken: "$RACKSPACE_SPOT_TOKEN"
+region: "${var.region}"
+EOF
       chmod 600 ~/.spot_config
       
       # Install spotctl if not available
       if ! command -v spotctl &> /dev/null; then
+        echo "Installing spotctl..."
         curl -sL "https://github.com/rackspace-spot/spotctl/releases/download/v0.1.1/spotctl-linux-amd64" -o /tmp/spotctl
         chmod +x /tmp/spotctl
+        echo "spotctl installed to /tmp/spotctl"
+      fi
+      
+      # Verify config was written
+      if [ -f "$CONFIG_PATH" ]; then
+        echo "✅ Config written successfully ($(wc -c < "$CONFIG_PATH") bytes)"
+      else
+        echo "❌ Failed to write config"
+        exit 1
       fi
     EOT
 
@@ -100,8 +122,8 @@ resource "terraform_data" "setup_spotctl_config" {
 # -----------------------------------------------------------------------------
 # Wait for Cluster to be Ready (NO sensitive vars - output VISIBLE)
 # -----------------------------------------------------------------------------
-# This resource polls for cluster status using spotctl.
-# Since it doesn't reference sensitive variables, output will be visible in logs.
+# This resource polls for cluster status AND kubeconfig availability.
+# It will NOT exit until kubeconfig is successfully retrieved.
 resource "terraform_data" "wait_for_cluster" {
   triggers_replace = [terraform_data.setup_spotctl_config.id]
 
@@ -112,6 +134,7 @@ resource "terraform_data" "wait_for_cluster" {
       CLUSTER_NAME="${var.cluster_name}"
       MAX_ATTEMPTS=240
       SLEEP_INTERVAL=30
+      CONFIG_PATH="/tmp/.spot_config"
       
       echo ""
       echo "=============================================="
@@ -122,6 +145,27 @@ resource "terraform_data" "wait_for_cluster" {
       echo "=============================================="
       echo ""
       
+      # CRITICAL: Verify config file exists
+      echo "Checking spotctl config..."
+      if [ ! -f "$CONFIG_PATH" ]; then
+        echo "❌ ERROR: spotctl config not found at $CONFIG_PATH"
+        echo "   Checking ~/.spot_config..."
+        if [ -f ~/.spot_config ]; then
+          echo "   Found at ~/.spot_config, copying to $CONFIG_PATH"
+          cp ~/.spot_config "$CONFIG_PATH"
+        else
+          echo "❌ FATAL: No spotctl config found!"
+          echo "   Expected: $CONFIG_PATH or ~/.spot_config"
+          exit 1
+        fi
+      fi
+      echo "✅ Config found at $CONFIG_PATH"
+      
+      # Show config (without token) for debugging
+      echo "Config contents (token redacted):"
+      sed 's/refreshToken:.*/refreshToken: [REDACTED]/' "$CONFIG_PATH"
+      echo ""
+      
       # Use spotctl from PATH or /tmp
       if command -v spotctl &> /dev/null; then
         SPOTCTL="spotctl"
@@ -129,93 +173,94 @@ resource "terraform_data" "wait_for_cluster" {
         SPOTCTL="/tmp/spotctl"
       fi
       
+      # Verify spotctl works
+      echo "Testing spotctl..."
+      if ! $SPOTCTL --version; then
+        echo "❌ spotctl not working!"
+        exit 1
+      fi
+      echo ""
+      
       for i in $(seq 1 $MAX_ATTEMPTS); do
         ELAPSED=$((i * SLEEP_INTERVAL / 60))
         
         # Get cloudspace status using spotctl
-        if STATUS_JSON=$($SPOTCTL cloudspaces get --name "$CLUSTER_NAME" --output json 2>&1); then
-          STATUS=$(echo "$STATUS_JSON" | jq -r '.status // "Unknown"')
-          PHASE=$(echo "$STATUS_JSON" | jq -r '.phase // ""')
+        echo "[Attempt $i/$MAX_ATTEMPTS] Checking status..."
+        
+        if STATUS_OUTPUT=$($SPOTCTL cloudspaces get --name "$CLUSTER_NAME" --output json 2>&1); then
+          STATUS=$(echo "$STATUS_OUTPUT" | jq -r '.status // "Unknown"')
+          PHASE=$(echo "$STATUS_OUTPUT" | jq -r '.phase // ""')
           
-          # Debug: show raw status on first iteration
-          if [ "$i" -eq 1 ]; then
-            echo "Raw status from API: $STATUS"
-            echo "Raw JSON (truncated):"
-            echo "$STATUS_JSON" | jq -c '.' | head -c 500
-            echo ""
-          fi
+          echo "  Status: $STATUS"
           
           case "$STATUS" in
-            # Rackspace API returns "Ready" for healthy clusters (UI shows "Healthy")
             "Ready"|"Healthy"|"Running"|"Active")
               echo ""
               echo "=============================================="
-              echo "✅ CLOUDSPACE READY!"
-              echo "=============================================="
-              echo "Cluster: $CLUSTER_NAME"
-              echo "Status:  $STATUS"
-              echo "Elapsed: $${ELAPSED} minutes"
+              echo "✅ CLOUDSPACE STATUS: $STATUS"
               echo "=============================================="
               
-              # Verify kubeconfig is accessible using spotctl
-              echo "Fetching kubeconfig via spotctl..."
-              if $SPOTCTL cloudspaces get-config --name "$CLUSTER_NAME" --file /tmp/kubeconfig-test 2>&1; then
-                if [ -s /tmp/kubeconfig-test ]; then
-                  echo "✅ Kubeconfig retrieved successfully"
-                  echo "   Size: $(wc -c < /tmp/kubeconfig-test) bytes"
-                  # Verify it's valid YAML with server endpoint
-                  if grep -q "server:" /tmp/kubeconfig-test; then
-                    echo "✅ Kubeconfig contains server endpoint"
-                    rm -f /tmp/kubeconfig-test
-                    exit 0
-                  else
-                    echo "⚠️  Kubeconfig missing server endpoint, waiting..."
-                  fi
+              # NOW verify kubeconfig is retrievable - DO NOT EXIT until this works
+              echo "Fetching kubeconfig..."
+              KUBECONFIG_OUTPUT=$($SPOTCTL cloudspaces get-config --name "$CLUSTER_NAME" --file /tmp/kubeconfig-verify 2>&1) || true
+              
+              if [ -f /tmp/kubeconfig-verify ] && [ -s /tmp/kubeconfig-verify ]; then
+                echo "✅ Kubeconfig retrieved ($(wc -c < /tmp/kubeconfig-verify) bytes)"
+                
+                if grep -q "server:" /tmp/kubeconfig-verify; then
+                  SERVER=$(grep "server:" /tmp/kubeconfig-verify | head -1 | awk '{print $2}')
+                  echo "✅ Server endpoint: $SERVER"
+                  rm -f /tmp/kubeconfig-verify
+                  echo ""
+                  echo "=============================================="
+                  echo "✅ CLUSTER READY - Kubeconfig verified!"
+                  echo "=============================================="
+                  exit 0
                 else
-                  echo "⚠️  Kubeconfig file is empty, waiting..."
+                  echo "⚠️  Kubeconfig missing server endpoint"
+                  cat /tmp/kubeconfig-verify | head -20
                 fi
               else
-                echo "⚠️  spotctl get-config failed, waiting..."
+                echo "⚠️  Kubeconfig retrieval failed or empty"
+                echo "   Output: $KUBECONFIG_OUTPUT"
               fi
-              rm -f /tmp/kubeconfig-test 2>/dev/null
+              
+              rm -f /tmp/kubeconfig-verify 2>/dev/null
+              echo "   Waiting for kubeconfig to become available..."
               ;;
+              
             "Provisioning"|"Creating"|"Pending")
-              printf "\r[%3d/%d] %-15s | Elapsed: %3dm | Phase: %s" "$i" "$MAX_ATTEMPTS" "$STATUS" "$ELAPSED" "$PHASE"
+              echo "  Phase: $PHASE"
+              echo "  Elapsed: $${ELAPSED}m"
               ;;
+              
             "Failed"|"Error"|"Degraded")
               echo ""
               echo "=============================================="
-              echo "❌ CLOUDSPACE FAILED"
+              echo "❌ CLOUDSPACE FAILED: $STATUS"
               echo "=============================================="
-              echo "Cluster: $CLUSTER_NAME"
-              echo "Status:  $STATUS"
-              echo ""
-              echo "Full status:"
-              echo "$STATUS_JSON" | jq '.' 2>/dev/null || echo "$STATUS_JSON"
+              echo "$STATUS_OUTPUT" | jq '.' 2>/dev/null || echo "$STATUS_OUTPUT"
               echo ""
               echo "Recovery: spotctl cloudspaces delete --name $CLUSTER_NAME"
-              echo "=============================================="
               exit 1
               ;;
+              
             *)
-              # Show unknown status for debugging
-              printf "\r[%3d/%d] %-15s | Elapsed: %3dm (unknown status)" "$i" "$MAX_ATTEMPTS" "$STATUS" "$ELAPSED"
+              echo "  Unknown status, continuing..."
               ;;
           esac
         else
-          printf "\r[%3d/%d] %-15s | Elapsed: %3dm" "$i" "$MAX_ATTEMPTS" "Initializing..." "$ELAPSED"
+          echo "  Could not fetch status: $STATUS_OUTPUT"
         fi
         
+        echo "  Sleeping ${SLEEP_INTERVAL}s..."
+        echo ""
         sleep $SLEEP_INTERVAL
       done
       
       echo ""
       echo "=============================================="
-      echo "❌ TIMEOUT"
-      echo "=============================================="
-      echo "Cluster did not become ready in $((MAX_ATTEMPTS * SLEEP_INTERVAL / 60)) minutes"
-      echo ""
-      echo "Check manually: spotctl cloudspaces get --name $CLUSTER_NAME"
+      echo "❌ TIMEOUT after $((MAX_ATTEMPTS * SLEEP_INTERVAL / 60)) minutes"
       echo "=============================================="
       exit 1
     EOT
@@ -227,10 +272,7 @@ resource "terraform_data" "wait_for_cluster" {
 # -----------------------------------------------------------------------------
 # Dynamic Kubeconfig Fetch (fresh every apply via spotctl)
 # -----------------------------------------------------------------------------
-# Uses local-exec to fetch kubeconfig dynamically instead of provider data source.
-# This ensures fresh kubeconfig is fetched every apply, not cached in state.
 resource "terraform_data" "fetch_kubeconfig" {
-  # Always fetch fresh kubeconfig on every apply
   triggers_replace = [timestamp()]
 
   provisioner "local-exec" {
@@ -238,6 +280,13 @@ resource "terraform_data" "fetch_kubeconfig" {
       set -e
       CLUSTER_NAME="${var.cluster_name}"
       KUBECONFIG_PATH="${path.module}/kubeconfig.yaml"
+      CONFIG_PATH="/tmp/.spot_config"
+      
+      # Verify config exists
+      if [ ! -f "$CONFIG_PATH" ] && [ ! -f ~/.spot_config ]; then
+        echo "❌ No spotctl config found!"
+        exit 1
+      fi
       
       # Use spotctl from PATH or /tmp
       if command -v spotctl &> /dev/null; then
@@ -246,7 +295,7 @@ resource "terraform_data" "fetch_kubeconfig" {
         SPOTCTL="/tmp/spotctl"
       fi
       
-      echo "Fetching fresh kubeconfig for $CLUSTER_NAME..."
+      echo "Fetching kubeconfig for $CLUSTER_NAME..."
       $SPOTCTL cloudspaces get-config --name "$CLUSTER_NAME" --file "$KUBECONFIG_PATH"
       
       if [ -s "$KUBECONFIG_PATH" ]; then
