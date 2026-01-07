@@ -76,10 +76,10 @@ resource "terraform_data" "setup_spotctl_config" {
       # Configure spotctl (sensitive operation)
       mkdir -p ~/.spot
       cat > ~/.spot_config << EOF
-      org: "${var.rackspace_org}"
-      refreshToken: "$RACKSPACE_SPOT_TOKEN"
-      region: "${var.region}"
-      EOF
+org: "${var.rackspace_org}"
+refreshToken: "$RACKSPACE_SPOT_TOKEN"
+region: "${var.region}"
+EOF
       chmod 600 ~/.spot_config
       
       # Install spotctl if not available
