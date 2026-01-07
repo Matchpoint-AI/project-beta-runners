@@ -49,7 +49,8 @@ resource "spot_cloudspace" "this" {
   wait_until_ready = false
 
   lifecycle {
-    ignore_changes = [wait_until_ready]
+    prevent_destroy = true
+    ignore_changes  = [wait_until_ready]
   }
 }
 
