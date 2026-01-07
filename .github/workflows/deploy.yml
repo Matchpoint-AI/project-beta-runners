@@ -13,14 +13,54 @@ env:
   TERRAGRUNT_VERSION: "0.54.0"
 
 jobs:
-  deploy:
-    name: Deploy
+  setup:
+    name: Setup
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 5
     permissions:
       contents: read
       id-token: write
+    outputs:
+      gcp_credentials_path: ${{ steps.auth.outputs.credentials_file_path }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: ${{ env.OPENTOFU_VERSION }}
+          tofu_wrapper: false
+
+      - name: Setup Terragrunt
+        run: |
+          wget -q https://github.com/gruntwork-io/terragrunt/releases/download/v${{ env.TERRAGRUNT_VERSION }}/terragrunt_linux_amd64
+          chmod +x terragrunt_linux_amd64
+          sudo mv terragrunt_linux_amd64 /usr/local/bin/terragrunt
+
+      - uses: google-github-actions/auth@v2
+        id: auth
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Validate Terragrunt Config
+        working-directory: infrastructure/live/prod
+        env:
+          GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
+          INFRA_GH_TOKEN: ${{ secrets.INFRA_GH_TOKEN }}
+        run: terragrunt run-all validate --terragrunt-non-interactive
+
+  stage-1-cloudspace:
+    name: "Stage 1: Cloudspace"
+    runs-on: ubuntu-latest
+    needs: setup
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -42,13 +82,120 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      - name: Terragrunt Apply All
-        working-directory: infrastructure/live/prod
+      - name: Apply Cloudspace
+        working-directory: infrastructure/live/prod/1-cloudspace
+        env:
+          GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
+        run: |
+          echo "::group::Terragrunt Init"
+          terragrunt init --terragrunt-non-interactive
+          echo "::endgroup::"
+
+          echo "::group::Terragrunt Plan"
+          terragrunt plan -out=tfplan --terragrunt-non-interactive
+          echo "::endgroup::"
+
+          echo "::group::Terragrunt Apply"
+          terragrunt apply -auto-approve tfplan --terragrunt-non-interactive
+          echo "::endgroup::"
+
+  stage-2-cluster-base:
+    name: "Stage 2: Cluster Base"
+    runs-on: ubuntu-latest
+    needs: stage-1-cloudspace
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: ${{ env.OPENTOFU_VERSION }}
+          tofu_wrapper: false
+
+      - name: Setup Terragrunt
+        run: |
+          wget -q https://github.com/gruntwork-io/terragrunt/releases/download/v${{ env.TERRAGRUNT_VERSION }}/terragrunt_linux_amd64
+          chmod +x terragrunt_linux_amd64
+          sudo mv terragrunt_linux_amd64 /usr/local/bin/terragrunt
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Apply Cluster Base (ArgoCD)
+        working-directory: infrastructure/live/prod/2-cluster-base
+        env:
+          GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
+        run: |
+          echo "::group::Terragrunt Init"
+          terragrunt init --terragrunt-non-interactive
+          echo "::endgroup::"
+
+          echo "::group::Terragrunt Plan"
+          terragrunt plan -out=tfplan --terragrunt-non-interactive
+          echo "::endgroup::"
+
+          echo "::group::Terragrunt Apply"
+          terragrunt apply -auto-approve tfplan --terragrunt-non-interactive
+          echo "::endgroup::"
+
+  stage-3-argocd-apps:
+    name: "Stage 3: ArgoCD Apps"
+    runs-on: ubuntu-latest
+    needs: stage-2-cluster-base
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: ${{ env.OPENTOFU_VERSION }}
+          tofu_wrapper: false
+
+      - name: Setup Terragrunt
+        run: |
+          wget -q https://github.com/gruntwork-io/terragrunt/releases/download/v${{ env.TERRAGRUNT_VERSION }}/terragrunt_linux_amd64
+          chmod +x terragrunt_linux_amd64
+          sudo mv terragrunt_linux_amd64 /usr/local/bin/terragrunt
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Apply ArgoCD Apps
+        working-directory: infrastructure/live/prod/3-argocd-apps
         env:
           GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
           INFRA_GH_TOKEN: ${{ secrets.INFRA_GH_TOKEN }}
-        run: terragrunt run-all apply -auto-approve --terragrunt-non-interactive
+        run: |
+          echo "::group::Terragrunt Init"
+          terragrunt init --terragrunt-non-interactive
+          echo "::endgroup::"
+
+          echo "::group::Terragrunt Plan"
+          terragrunt plan -out=tfplan --terragrunt-non-interactive
+          echo "::endgroup::"
+
+          echo "::group::Terragrunt Apply"
+          terragrunt apply -auto-approve tfplan --terragrunt-non-interactive
+          echo "::endgroup::"
 
   # Note: verify-runners.yml triggers automatically via workflow_run

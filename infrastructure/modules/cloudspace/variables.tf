@@ -38,3 +38,4 @@ variable "bid_price" {
     error_message = "Bid price must be between 0 and 1 (exclusive)."
   }
 }
+
