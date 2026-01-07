@@ -6,7 +6,7 @@ locals {
   region       = "us-central-dfw-1"
   
   # Node pool settings
-  server_class = "gp.vs1.large"  # 4 vCPU, 15GB RAM
+  server_class = "gp.vs1.large-dfw"  # 4 vCPU, 15GB RAM in DFW
   min_nodes    = 2
   max_nodes    = 15
   
