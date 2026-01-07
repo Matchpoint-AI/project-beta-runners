@@ -67,7 +67,7 @@ jobs:
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Terragrunt 3-State Architecture
+### Terragrunt 3-Stage Architecture
 
 | State | Purpose | Duration | Timeout |
 |-------|---------|----------|---------|
@@ -138,7 +138,7 @@ project-beta-runners/
 ### Deploy (`deploy.yml`)
 
 - **On PR**: Runs `terragrunt plan` for preview
-- **On merge to main**: Applies sequentially (State 1 → 2 → 3)
+- **On merge to main**: Applies sequentially (Stage 1 → 2 → 3)
 - **Auto-triggers**: `verify-runners.yml` after successful deploy
 
 ### Verify (`verify-runners.yml`)

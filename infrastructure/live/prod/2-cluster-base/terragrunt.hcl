@@ -1,7 +1,7 @@
-# State 2: Cluster Base
+# Stage 2: Cluster Base
 #
 # Fetches kubeconfig and installs ArgoCD.
-# Only runs after State 1 confirms the cluster is ready.
+# Only runs after Stage 1 confirms the cluster is ready.
 
 include "root" {
   path = find_in_parent_folders("root.hcl")
@@ -12,7 +12,7 @@ terraform {
   source = "${get_parent_terragrunt_dir()}/../modules/cluster-base"
 }
 
-# Dependency on State 1 - cluster must exist before we can get kubeconfig
+# Dependency on Stage 1 - cluster must exist before we can get kubeconfig
 dependency "cloudspace" {
   config_path = "../1-cloudspace"
   

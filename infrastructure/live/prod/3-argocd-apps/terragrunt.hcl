@@ -1,4 +1,4 @@
-# State 3: ArgoCD Apps
+# Stage 3: ArgoCD Apps
 #
 # Deploys ARC controller and runner ScaleSet.
 # This is the fastest operation (2-5 minutes).
@@ -12,7 +12,7 @@ terraform {
   source = "${get_parent_terragrunt_dir()}/../modules/argocd-apps"
 }
 
-# Dependency on State 2 - ArgoCD must be ready
+# Dependency on Stage 2 - ArgoCD must be ready
 dependency "cluster_base" {
   config_path = "../2-cluster-base"
   

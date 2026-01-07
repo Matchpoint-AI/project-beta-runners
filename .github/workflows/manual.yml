@@ -9,9 +9,9 @@ on:
         type: choice
         options:
           - plan-all
-          - apply-state-1
-          - apply-state-2
-          - apply-state-3
+          - apply-stage-1
+          - apply-stage-2
+          - apply-stage-3
           - destroy-all
       confirm_destroy:
         description: 'Type DESTROY to confirm destruction'
@@ -61,8 +61,8 @@ jobs:
           ARC_GITHUB_APP_PRIVATE_KEY: ${{ secrets.ARC_GITHUB_APP_PRIVATE_KEY }}
         run: terragrunt run-all plan
 
-      - name: Apply State 1
-        if: inputs.action == 'apply-state-1'
+      - name: Apply Stage 1
+        if: inputs.action == 'apply-stage-1'
         working-directory: infrastructure/live/prod/1-cloudspace
         env:
           GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
@@ -70,8 +70,8 @@ jobs:
           RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
         run: terragrunt apply -auto-approve
 
-      - name: Apply State 2
-        if: inputs.action == 'apply-state-2'
+      - name: Apply Stage 2
+        if: inputs.action == 'apply-stage-2'
         working-directory: infrastructure/live/prod/2-cluster-base
         env:
           GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
@@ -79,8 +79,8 @@ jobs:
           RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
         run: terragrunt apply -auto-approve
 
-      - name: Apply State 3
-        if: inputs.action == 'apply-state-3'
+      - name: Apply Stage 3
+        if: inputs.action == 'apply-stage-3'
         working-directory: infrastructure/live/prod/3-argocd-apps
         env:
           GCP_PROJECT: ${{ secrets.GCP_PROJECT }}

@@ -1,4 +1,4 @@
-# State 1: Cloudspace
+# Stage 1: Cloudspace
 #
 # Creates the Rackspace Spot managed Kubernetes cluster and node pool.
 # This is the slowest operation (~50-60 minutes for control plane provisioning).
