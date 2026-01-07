@@ -35,7 +35,7 @@ locals {
 # -----------------------------------------------------------------------------
 # ARC System Namespace (for controller)
 # -----------------------------------------------------------------------------
-resource "kubernetes_namespace" "arc_systems" {
+resource "kubernetes_namespace_v1" "arc_systems" {
   metadata {
     name = local.arc_namespace
   }
@@ -44,7 +44,7 @@ resource "kubernetes_namespace" "arc_systems" {
 # -----------------------------------------------------------------------------
 # ARC Runners Namespace (for runner pods)
 # -----------------------------------------------------------------------------
-resource "kubernetes_namespace" "arc_runners" {
+resource "kubernetes_namespace_v1" "arc_runners" {
   metadata {
     name = local.runner_namespace
   }
@@ -55,7 +55,7 @@ resource "kubernetes_namespace" "arc_runners" {
 # Uses PAT with admin:org and manage_runners:org scopes
 # This must exist before ArgoCD syncs the runner Application
 # -----------------------------------------------------------------------------
-resource "kubernetes_secret" "github_token" {
+resource "kubernetes_secret_v1" "github_token" {
   metadata {
     name      = "arc-org-github-secret"
     namespace = local.runner_namespace
@@ -65,7 +65,7 @@ resource "kubernetes_secret" "github_token" {
     github_token = var.github_token
   }
 
-  depends_on = [kubernetes_namespace.arc_runners]
+  depends_on = [kubernetes_namespace_v1.arc_runners]
 }
 
 # -----------------------------------------------------------------------------
@@ -110,8 +110,8 @@ resource "kubernetes_manifest" "bootstrap_application" {
   }
 
   depends_on = [
-    kubernetes_namespace.arc_systems,
-    kubernetes_namespace.arc_runners,
-    kubernetes_secret.github_token
+    kubernetes_namespace_v1.arc_systems,
+    kubernetes_namespace_v1.arc_runners,
+    kubernetes_secret_v1.github_token
   ]
 }

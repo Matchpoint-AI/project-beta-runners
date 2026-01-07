@@ -37,7 +37,7 @@ provider "helm" {
 # -----------------------------------------------------------------------------
 # ArgoCD Namespace
 # -----------------------------------------------------------------------------
-resource "kubernetes_namespace" "argocd" {
+resource "kubernetes_namespace_v1" "argocd" {
   metadata {
     name = "argocd"
   }
@@ -51,28 +51,24 @@ resource "helm_release" "argocd" {
   repository = "https://argoproj.github.io/argo-helm"
   chart      = "argo-cd"
   version    = var.argocd_chart_version
-  namespace  = kubernetes_namespace.argocd.metadata[0].name
+  namespace  = kubernetes_namespace_v1.argocd.metadata[0].name
 
   wait    = true
   timeout = 600 # 10 minutes
 
-  # Core settings
-  set {
-    name  = "server.service.type"
-    value = "ClusterIP"
-  }
+  values = [yamlencode({
+    server = {
+      service = {
+        type = "ClusterIP"
+      }
+    }
+    dex = {
+      enabled = false
+    }
+    repoServer = {
+      replicas = 1
+    }
+  })]
 
-  # Disable dex (we use GitHub App auth)
-  set {
-    name  = "dex.enabled"
-    value = "false"
-  }
-
-  # Enable repo server for GitOps
-  set {
-    name  = "repoServer.replicas"
-    value = "1"
-  }
-
-  depends_on = [kubernetes_namespace.argocd]
+  depends_on = [kubernetes_namespace_v1.argocd]
 }
