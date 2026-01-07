@@ -51,16 +51,4 @@ jobs:
           INFRA_GH_TOKEN: ${{ secrets.INFRA_GH_TOKEN }}
         run: terragrunt run-all apply -auto-approve --terragrunt-non-interactive
 
-  verify:
-    needs: deploy
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'verify-runners.yml',
-              ref: 'main'
-            });
+  # Note: verify-runners.yml triggers automatically via workflow_run
