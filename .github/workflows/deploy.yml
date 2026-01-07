@@ -95,6 +95,21 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
+      - name: Fetch kubeconfig for existing cloudspace
+        if: steps.preflight.outputs.cloudspace_status == 'Ready'
+        run: |
+          mkdir -p ~/.kube
+          CLUSTER_NAME="${{ env.CLOUDSPACE_NAME }}"
+          spotctl cloudspaces get-config --name "$CLUSTER_NAME"
+          # Copy to module directory where terraform expects it
+          MODULE_DIR="infrastructure/modules/cloudspace"
+          if [ -f "$HOME/.kube/$CLUSTER_NAME.yaml" ]; then
+            cp "$HOME/.kube/$CLUSTER_NAME.yaml" "$MODULE_DIR/kubeconfig.yaml"
+            echo "✅ Kubeconfig fetched for $CLUSTER_NAME"
+          else
+            echo "⚠️ Kubeconfig not found at $HOME/.kube/$CLUSTER_NAME.yaml"
+          fi
+
       - name: Terragrunt Apply All
         working-directory: infrastructure/live/prod
         env:
