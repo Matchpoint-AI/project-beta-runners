@@ -67,7 +67,7 @@ resource "helm_release" "arc_controller" {
   chart      = "gha-runner-scale-set-controller"
   version    = var.arc_version
   namespace  = local.arc_namespace
-  
+
   wait    = true
   timeout = 300
 
@@ -83,7 +83,7 @@ resource "helm_release" "arc_runners" {
   chart      = "gha-runner-scale-set"
   version    = var.arc_version
   namespace  = local.runner_namespace
-  
+
   wait    = true
   timeout = 300
 
@@ -141,11 +141,11 @@ resource "helm_release" "arc_runners" {
             securityContext = { runAsUser = 1000 }
           },
           {
-            name  = "dind"
-            image = "docker:24-dind"
+            name            = "dind"
+            image           = "docker:24-dind"
             securityContext = { privileged = true }
-            env = [{ name = "DOCKER_TLS_CERTDIR", value = "" }]
-            volumeMounts = [{ name = "dind-storage", mountPath = "/var/lib/docker" }]
+            env             = [{ name = "DOCKER_TLS_CERTDIR", value = "" }]
+            volumeMounts    = [{ name = "dind-storage", mountPath = "/var/lib/docker" }]
           }
         ]
         volumes = [{ name = "dind-storage", emptyDir = { sizeLimit = "20Gi" } }]
