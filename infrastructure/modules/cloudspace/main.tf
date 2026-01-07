@@ -38,6 +38,12 @@ resource "spot_cloudspace" "this" {
   # for the 50-60 minute provisioning time. We use terraform_data.wait_for_cluster
   # below to ensure the cluster is fully ready before reading kubeconfig.
   wait_until_ready = false
+
+  # Rackspace Spot only allows updating Webhook and KubernetesVersion fields.
+  # Ignore changes to other fields to prevent update errors.
+  lifecycle {
+    ignore_changes = [wait_until_ready]
+  }
 }
 
 # -----------------------------------------------------------------------------
