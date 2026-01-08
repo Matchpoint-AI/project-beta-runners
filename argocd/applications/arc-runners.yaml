@@ -22,8 +22,8 @@ spec:
         runnerScaleSetName: project-beta-runners
 
         # Autoscaling configuration
-        minRunners: 5
-        maxRunners: 25
+        minRunners: 10
+        maxRunners: 50
 
         # Controller reference
         controllerServiceAccount:

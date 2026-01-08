@@ -25,13 +25,13 @@ variable "server_class" {
 variable "min_nodes" {
   description = "Minimum number of nodes in the pool"
   type        = number
-  default     = 2
+  default     = 4
 }
 
 variable "max_nodes" {
   description = "Maximum number of nodes in the pool"
   type        = number
-  default     = 15
+  default     = 30
 }
 
 variable "bid_price" {
