@@ -55,8 +55,14 @@ resource "spot_cloudspace" "this" {
 }
 
 # -----------------------------------------------------------------------------
-# Node Pool
+# Node Pool (REPLACEABLE)
 # -----------------------------------------------------------------------------
+# Unlike cloudspace, nodepool CAN be destroyed and recreated.
+# Rackspace Spot only supports one nodepool per cloudspace, so replacement
+# means delete-then-create (not create-before-destroy).
+#
+# ⚠️  server_class change = nodepool replacement (5-10 min outage)
+# ✅  Safe to change in-place: bid_price, min_nodes, max_nodes
 
 resource "spot_spotnodepool" "this" {
   cloudspace_name = spot_cloudspace.this.cloudspace_name
@@ -67,6 +73,9 @@ resource "spot_spotnodepool" "this" {
     min_nodes = var.min_nodes
     max_nodes = var.max_nodes
   }
+
+  # No prevent_destroy - nodepool replacement is acceptable (5-10 min)
+  # compared to cloudspace recreation (50-60 min)
 
   depends_on = [spot_cloudspace.this]
 }
