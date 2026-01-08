@@ -5,6 +5,11 @@
 # - Terraform creates namespaces and secrets
 # - Terraform applies bootstrap Application CRD
 # - ArgoCD syncs and manages ARC controller + runners from repo manifests
+#
+# SKIP: This module is skipped until the secondary cloudspace is provisioned.
+# The kubernetes provider requires a real cluster connection even during plan.
+# TODO: Remove this skip block after secondary cloudspace is Ready.
+skip = true
 
 include "root" {
   path = find_in_parent_folders("root.hcl")
