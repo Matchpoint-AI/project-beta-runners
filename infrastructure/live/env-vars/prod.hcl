@@ -6,14 +6,15 @@ locals {
   region       = "us-central-dfw-1"
   
   # Node pool settings
-  server_class = "gp.vs1.large-dfw"  # 4 vCPU, 15GB RAM in DFW
-  min_nodes    = 2
-  max_nodes    = 15
+  # Upgraded to xlarge for better efficiency: 2 runners per node vs 1
+  server_class = "gp.vs1.xlarge-dfw"  # 8 vCPU, 30GB RAM in DFW
+  min_nodes    = 4
+  max_nodes    = 25
   
   # Runner settings
   runner_label = "project-beta-runners"
-  min_runners  = 5
-  max_runners  = 25
+  min_runners  = 10
+  max_runners  = 50
   
   # ArgoCD settings
   argocd_chart_version = "5.51.6"  # Maps to ArgoCD 2.10.x
