@@ -9,7 +9,7 @@ spec:
   project: default
   source:
     repoURL: ghcr.io/actions/actions-runner-controller-charts
-    targetRevision: 0.9.3
+    targetRevision: 0.10.0
     chart: gha-runner-scale-set
     helm:
       releaseName: arc-runners
@@ -30,9 +30,79 @@ spec:
           namespace: arc-systems
           name: arc-controller-gha-rs-controller
 
-        # Use built-in Docker-in-Docker support from the chart
-        containerMode:
-          type: "dind"
+        # Explicit template for Docker-in-Docker support
+        # Using custom template instead of containerMode for full control
+        # This enables docker build/push for frontend releases
+        template:
+          spec:
+            initContainers:
+              - name: init-dind-externals
+                image: ghcr.io/actions/actions-runner:latest
+                command: ["cp", "-r", "-v", "/home/runner/externals/.", "/home/runner/tmpDir/"]
+                volumeMounts:
+                  - name: dind-externals
+                    mountPath: /home/runner/tmpDir
+            containers:
+              - name: runner
+                image: ghcr.io/actions/actions-runner:latest
+                command: ["/home/runner/run.sh"]
+                env:
+                  - name: DOCKER_HOST
+                    value: unix:///var/run/docker.sock
+                  - name: RUNNER_WAIT_FOR_DOCKER_IN_SECONDS
+                    value: "120"
+                volumeMounts:
+                  - name: work
+                    mountPath: /home/runner/_work
+                  - name: dind-sock
+                    mountPath: /var/run
+                  - name: dind-externals
+                    mountPath: /home/runner/externals
+                resources:
+                  requests:
+                    cpu: "2"
+                    memory: 4Gi
+                  limits:
+                    cpu: "4"
+                    memory: 8Gi
+              - name: dind
+                image: docker:24-dind
+                args:
+                  - dockerd
+                  - --host=unix:///var/run/docker.sock
+                  - --group=$(DOCKER_GROUP_GID)
+                env:
+                  - name: DOCKER_GROUP_GID
+                    value: "123"
+                securityContext:
+                  privileged: true
+                volumeMounts:
+                  - name: work
+                    mountPath: /home/runner/_work
+                  - name: dind-sock
+                    mountPath: /var/run
+                  - name: dind-externals
+                    mountPath: /home/runner/externals
+                  - name: docker-storage
+                    mountPath: /var/lib/docker
+                resources:
+                  requests:
+                    cpu: "1"
+                    memory: 2Gi
+                  limits:
+                    cpu: "2"
+                    memory: 4Gi
+            volumes:
+              - name: work
+                emptyDir:
+                  sizeLimit: 30Gi
+              - name: dind-sock
+                emptyDir: {}
+              - name: dind-externals
+                emptyDir: {}
+              - name: docker-storage
+                emptyDir:
+                  sizeLimit: 30Gi
   destination:
     server: https://kubernetes.default.svc
     namespace: arc-runners
