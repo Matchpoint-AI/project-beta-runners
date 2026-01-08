@@ -19,7 +19,7 @@ variable "rackspace_org" {
 variable "server_class" {
   description = "Node pool server class. WARNING: Changing forces nodepool destruction (5-10 min outage)!"
   type        = string
-  default     = "gp.vs1.xlarge-dfw"  # 8 vCPU, 30GB RAM in DFW
+  default     = "gp.vs1.xlarge-dfw" # 8 vCPU, 30GB RAM in DFW
 }
 
 variable "min_nodes" {
@@ -37,7 +37,7 @@ variable "max_nodes" {
 variable "bid_price" {
   description = "Bid price per node per hour in USD. Target 70-75% of on-demand equivalent for reliability. Safe to change (no nodepool replacement)."
   type        = number
-  default     = 0.35  # ~73% of xlarge on-demand equivalent ($0.48)
+  default     = 0.35 # ~73% of xlarge on-demand equivalent ($0.48)
 
   validation {
     condition     = var.bid_price > 0 && var.bid_price < 1
