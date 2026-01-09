@@ -78,9 +78,9 @@ jobs:
             echo "Cloudspace: ${{ env.CLOUDSPACE_NAME }}"
             echo "Status: $STATUS"
             case "$STATUS" in
-              "Ready"|"Running"|"Healthy") echo "✅ Cloudspace is healthy" ;;
-              "Provisioning"|"Creating") echo "::warning::Cloudspace is still provisioning" ;;
-              "Failed"|"Error") echo "::error::Cloudspace is in $STATUS state!" ;;
+              "Ready"|"Running"|"Healthy"|"fulfilled") echo "✅ Cloudspace is healthy (status: $STATUS)" ;;
+              "Provisioning"|"Creating"|"Pending") echo "::warning::Cloudspace is still provisioning (status: $STATUS)" ;;
+              "Failed"|"Error"|"Degraded") echo "::error::Cloudspace is in $STATUS state!" ;;
               *) echo "::notice::Unknown status: $STATUS" ;;
             esac
           else
