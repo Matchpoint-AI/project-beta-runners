@@ -137,7 +137,7 @@ resource "terraform_data" "wait_for_cluster" {
           STATUS=$(echo "$STATUS_JSON" | jq -r '.status // "Unknown"')
           
           case "$STATUS" in
-            "Ready"|"Healthy"|"Running"|"Active")
+            "Ready"|"Healthy"|"Running"|"Active"|"fulfilled")
               echo "✅ Cloudspace ready. Fetching kubeconfig..."
               $SPOTCTL cloudspaces get-config --name "$CLUSTER_NAME"
               if [ -s "$KUBECONFIG_PATH" ] && grep -q "server:" "$KUBECONFIG_PATH"; then
