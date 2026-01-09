@@ -4,6 +4,12 @@ on:
   pull_request:
     branches: [main]
 
+# Queue plan runs for the same PR but never cancel in-progress plans
+# Plans must complete to show accurate infrastructure diffs
+concurrency:
+  group: ci-plan-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
 env:
   OPENTOFU_VERSION: "1.8.0"
   TERRAGRUNT_VERSION: "0.54.0"
@@ -116,6 +122,37 @@ jobs:
           printf 'org: "matchpoint-ai"\nrefreshToken: "%s"\nregion: "us-central-dfw-1"\n' "$RACKSPACE_SPOT_TOKEN" > ~/.spot_config
           chmod 600 ~/.spot_config
 
+      - name: Check cluster connectivity
+        id: cluster_check
+        env:
+          RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
+        run: |
+          # Try to fetch kubeconfig and test cluster connectivity
+          CLOUDSPACE_NAME="matchpoint-runners"
+          SPOTCTL="/tmp/spotctl"
+
+          echo "Checking cluster connectivity..."
+          if $SPOTCTL cloudspaces get-config --name "$CLOUDSPACE_NAME" 2>/dev/null; then
+            KUBECONFIG="$HOME/.kube/$CLOUDSPACE_NAME.yaml"
+            if [ -f "$KUBECONFIG" ]; then
+              export KUBECONFIG
+              # Test API connectivity with 10s timeout
+              if timeout 10 kubectl cluster-info &>/dev/null; then
+                echo "cluster_reachable=true" >> $GITHUB_OUTPUT
+                echo "✅ Cluster API is reachable"
+              else
+                echo "cluster_reachable=false" >> $GITHUB_OUTPUT
+                echo "⚠️ Cluster API timeout - will skip Kubernetes-dependent stages"
+              fi
+            else
+              echo "cluster_reachable=false" >> $GITHUB_OUTPUT
+              echo "⚠️ Kubeconfig not available"
+            fi
+          else
+            echo "cluster_reachable=false" >> $GITHUB_OUTPUT
+            echo "⚠️ Could not fetch kubeconfig"
+          fi
+
       - name: Terragrunt Plan
         id: plan
         working-directory: infrastructure/live/prod
@@ -126,10 +163,20 @@ jobs:
           INFRA_GH_TOKEN: ${{ secrets.INFRA_GH_TOKEN }}
         run: |
           set +e
-          # Skip 3-argocd-apps which requires kubernetes_manifest on live cluster
-          # Stages 1-cloudspace and 2-cluster-base are now plannable with kubeconfig
-          terragrunt run-all plan -no-color \
-            --terragrunt-exclude-dir 3-argocd-apps 2>&1 | tee plan.txt
+
+          # Determine which stages to exclude based on cluster connectivity
+          EXCLUDE_DIRS="--terragrunt-exclude-dir 3-argocd-apps"
+          if [ "${{ steps.cluster_check.outputs.cluster_reachable }}" != "true" ]; then
+            echo "::warning::Cluster unreachable - excluding 2-cluster-base from plan"
+            EXCLUDE_DIRS="$EXCLUDE_DIRS --terragrunt-exclude-dir 2-cluster-base"
+          fi
+
+          # Run plan with appropriate exclusions
+          # 3-argocd-apps always excluded (requires kubernetes_manifest on live cluster)
+          # 2-cluster-base excluded if cluster API is unreachable
+          # Using -lock=false because plans are read-only and shouldn't compete for state locks
+          # This allows CI to run even when a deploy is in progress
+          terragrunt run-all plan -no-color -lock=false $EXCLUDE_DIRS 2>&1 | tee plan.txt
           exitcode=${PIPESTATUS[0]}
           echo "exitcode=$exitcode" >> $GITHUB_OUTPUT
           echo "output<<EOF" >> $GITHUB_OUTPUT
