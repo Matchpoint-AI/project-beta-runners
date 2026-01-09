@@ -4,6 +4,12 @@ on:
   pull_request:
     branches: [main]
 
+# Queue plan runs for the same PR but never cancel in-progress plans
+# Plans must complete to show accurate infrastructure diffs
+concurrency:
+  group: ci-plan-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
 env:
   OPENTOFU_VERSION: "1.8.0"
   TERRAGRUNT_VERSION: "0.54.0"
@@ -168,7 +174,9 @@ jobs:
           # Run plan with appropriate exclusions
           # 3-argocd-apps always excluded (requires kubernetes_manifest on live cluster)
           # 2-cluster-base excluded if cluster API is unreachable
-          terragrunt run-all plan -no-color $EXCLUDE_DIRS 2>&1 | tee plan.txt
+          # Using -lock=false because plans are read-only and shouldn't compete for state locks
+          # This allows CI to run even when a deploy is in progress
+          terragrunt run-all plan -no-color -lock=false $EXCLUDE_DIRS 2>&1 | tee plan.txt
           exitcode=${PIPESTATUS[0]}
           echo "exitcode=$exitcode" >> $GITHUB_OUTPUT
           echo "output<<EOF" >> $GITHUB_OUTPUT
