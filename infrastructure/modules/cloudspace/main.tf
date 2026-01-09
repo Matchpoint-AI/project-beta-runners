@@ -138,7 +138,7 @@ resource "terraform_data" "wait_for_cluster" {
           
           case "$STATUS" in
             "Ready"|"Healthy"|"Running"|"Active"|"fulfilled")
-              echo "✅ Cloudspace ready. Fetching kubeconfig..."
+              echo "✅ Cloudspace ready (status: $STATUS). Fetching kubeconfig..."
               $SPOTCTL cloudspaces get-config --name "$CLUSTER_NAME"
               if [ -s "$KUBECONFIG_PATH" ] && grep -q "server:" "$KUBECONFIG_PATH"; then
                 echo "✅ Kubeconfig verified at $KUBECONFIG_PATH"
@@ -167,6 +167,61 @@ resource "terraform_data" "wait_for_cluster" {
 }
 
 # -----------------------------------------------------------------------------
+# Wait for Nodepool Ready
+# -----------------------------------------------------------------------------
+# Polls nodepool status until Ready.
+# Nodepools provision faster than cloudspaces (~5-15 min vs 50-60 min).
+# Max wait: 60 attempts * 30s = 30 minutes
+
+resource "terraform_data" "wait_for_nodepool" {
+  # triggers_replace forces re-creation when nodepool changes
+  triggers_replace = [spot_spotnodepool.this.name]
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      set -e
+      NODEPOOL_NAME="${spot_spotnodepool.this.name}"
+      MAX_ATTEMPTS=60
+      SLEEP_INTERVAL=30
+      SPOTCTL=$(command -v spotctl || echo "/tmp/spotctl")
+
+      echo "Waiting for nodepool $NODEPOOL_NAME (max 30 minutes)..."
+
+      for i in $(seq 1 $MAX_ATTEMPTS); do
+        if STATUS_JSON=$($SPOTCTL nodepools spot get --name "$NODEPOOL_NAME" --output json 2>&1); then
+          STATUS=$(echo "$STATUS_JSON" | jq -r '.status // "Unknown"')
+
+          case "$STATUS" in
+            "Ready"|"Healthy"|"Running"|"Active")
+              echo "✅ Nodepool ready: $STATUS"
+              exit 0
+              ;;
+            "Provisioning"|"Creating"|"Pending"|"Scaling")
+              echo "[$i/$MAX_ATTEMPTS] Status: $STATUS"
+              ;;
+            "Failed"|"Error"|"Degraded")
+              echo "❌ Nodepool failed: $STATUS"
+              exit 1
+              ;;
+            *)
+              echo "[$i/$MAX_ATTEMPTS] Status: $STATUS (unknown, continuing...)"
+              ;;
+          esac
+        else
+          echo "[$i/$MAX_ATTEMPTS] API call failed, retrying..."
+        fi
+        sleep $SLEEP_INTERVAL
+      done
+
+      echo "❌ Timeout waiting for nodepool"
+      exit 1
+    EOT
+  }
+
+  depends_on = [terraform_data.wait_for_cluster]
+}
+
+# -----------------------------------------------------------------------------
 # Kubeconfig Fetch (External Data Source)
 # -----------------------------------------------------------------------------
 # Uses external data source to fetch kubeconfig via spotctl.
@@ -180,7 +235,7 @@ data "external" "kubeconfig" {
     cluster_name = var.cluster_name
   }
 
-  depends_on = [terraform_data.wait_for_cluster]
+  depends_on = [terraform_data.wait_for_nodepool]
 }
 
 locals {
