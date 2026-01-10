@@ -18,10 +18,17 @@ locals {
 }
 
 inputs = {
+  # Primary cloudspace
   cluster_name = local.env_vars.locals.cluster_name
   region       = local.env_vars.locals.region
   server_class = local.env_vars.locals.server_class
   min_nodes    = local.env_vars.locals.min_nodes
   max_nodes    = local.env_vars.locals.max_nodes
   bid_price    = local.env_vars.locals.bid_price
+
+  # High Availability configuration (Issue #121)
+  enable_ha              = local.env_vars.locals.enable_ha
+  secondary_cluster_name = local.env_vars.locals.secondary_cluster_name
+  secondary_region       = local.env_vars.locals.secondary_region
+  secondary_server_class = local.env_vars.locals.secondary_server_class
 }

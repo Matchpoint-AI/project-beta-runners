@@ -1,8 +1,35 @@
 # Cloudspace Module - Input Variables
 
 variable "cluster_name" {
-  description = "Name of the Kubernetes cluster"
+  description = "Name of the primary Kubernetes cluster"
   type        = string
+}
+
+# -----------------------------------------------------------------------------
+# High Availability Configuration
+# -----------------------------------------------------------------------------
+variable "enable_ha" {
+  description = "Enable High Availability mode with dual cloudspaces. When enabled, both primary and secondary cloudspaces must be healthy before HA is active."
+  type        = bool
+  default     = false
+}
+
+variable "secondary_cluster_name" {
+  description = "Name of the secondary Kubernetes cluster (required when enable_ha=true)"
+  type        = string
+  default     = ""
+}
+
+variable "secondary_region" {
+  description = "Rackspace Spot region for secondary cloudspace (required when enable_ha=true)"
+  type        = string
+  default     = ""
+}
+
+variable "secondary_server_class" {
+  description = "Node pool server class for secondary cloudspace. Should match primary for balanced HA."
+  type        = string
+  default     = ""
 }
 
 variable "region" {
