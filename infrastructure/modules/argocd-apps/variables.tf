@@ -42,3 +42,60 @@ variable "target_revision" {
   type        = string
   default     = "main"
 }
+
+# -----------------------------------------------------------------------------
+# Namespace Configuration
+# -----------------------------------------------------------------------------
+variable "arc_namespace" {
+  description = "Kubernetes namespace for ARC controller"
+  type        = string
+  default     = "arc-systems"
+}
+
+variable "arc_runners_namespace" {
+  description = "Kubernetes namespace for ARC runner pods"
+  type        = string
+  default     = "arc-runners"
+}
+
+variable "argocd_namespace" {
+  description = "Kubernetes namespace where ArgoCD is installed"
+  type        = string
+  default     = "argocd"
+}
+
+# -----------------------------------------------------------------------------
+# GitHub Runner Configuration
+# -----------------------------------------------------------------------------
+variable "github_secret_name" {
+  description = "Name of the Kubernetes secret containing GitHub token"
+  type        = string
+  default     = "arc-org-github-secret"
+}
+
+# -----------------------------------------------------------------------------
+# ArgoCD Application Configuration
+# -----------------------------------------------------------------------------
+variable "bootstrap_app_name" {
+  description = "Name of the bootstrap ArgoCD Application"
+  type        = string
+  default     = "github-runners-bootstrap"
+}
+
+variable "argocd_sync_path" {
+  description = "Path in the Git repo for ArgoCD to sync applications from"
+  type        = string
+  default     = "argocd/applications"
+}
+
+variable "argocd_auto_prune" {
+  description = "Enable automatic pruning of resources"
+  type        = bool
+  default     = true
+}
+
+variable "argocd_self_heal" {
+  description = "Enable automatic self-healing of drifted resources"
+  type        = bool
+  default     = true
+}

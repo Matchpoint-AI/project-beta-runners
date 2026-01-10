@@ -55,4 +55,8 @@ inputs = {
   # ArgoCD sync configuration
   repo_url        = "https://github.com/Matchpoint-AI/project-beta-runners"
   target_revision = "main"
+
+  # Keep existing ArgoCD Application name for backward compatibility
+  # (module default changed to "github-runners-bootstrap" for reusability)
+  bootstrap_app_name = "project-beta-runners-bootstrap"
 }

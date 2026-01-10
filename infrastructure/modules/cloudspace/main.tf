@@ -97,7 +97,7 @@ resource "terraform_data" "setup_spotctl_config" {
       chmod 600 ~/.spot_config
       
       if ! command -v spotctl &> /dev/null; then
-        curl -sL "https://github.com/rackspace-spot/spotctl/releases/download/v0.1.1/spotctl-linux-amd64" -o /tmp/spotctl
+        curl -sL "https://github.com/rackspace-spot/spotctl/releases/download/${var.spotctl_version}/spotctl-linux-amd64" -o /tmp/spotctl
         chmod +x /tmp/spotctl
       fi
     EOT
@@ -125,8 +125,8 @@ resource "terraform_data" "wait_for_cluster" {
       set -e
       CLUSTER_NAME="${var.cluster_name}"
       KUBECONFIG_PATH="$HOME/.kube/$CLUSTER_NAME.yaml"
-      MAX_ATTEMPTS=240
-      SLEEP_INTERVAL=30
+      MAX_ATTEMPTS=${var.cloudspace_poll_max_attempts}
+      SLEEP_INTERVAL=${var.cloudspace_poll_interval}
       SPOTCTL=$(command -v spotctl || echo "/tmp/spotctl")
       
       mkdir -p ~/.kube
@@ -181,8 +181,8 @@ resource "terraform_data" "wait_for_nodepool" {
     command = <<-EOT
       set -e
       NODEPOOL_NAME="${spot_spotnodepool.this.name}"
-      MAX_ATTEMPTS=60
-      SLEEP_INTERVAL=30
+      MAX_ATTEMPTS=${var.nodepool_poll_max_attempts}
+      SLEEP_INTERVAL=${var.nodepool_poll_interval}
       SPOTCTL=$(command -v spotctl || echo "/tmp/spotctl")
 
       echo "Waiting for nodepool $NODEPOOL_NAME (max 30 minutes)..."
