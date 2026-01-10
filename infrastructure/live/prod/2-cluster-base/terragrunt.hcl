@@ -22,6 +22,20 @@ terraform {
   source = "${local.versions.locals.remote_modules}//cluster-base?ref=${local.versions.locals.modules_version}"
 }
 
+# Import existing bootstrap Application into terraform state
+# This is needed because the resource was created before terraform tracked it.
+# Once imported, this block can be removed.
+generate "import" {
+  path      = "import.tf"
+  if_exists = "overwrite_terragrunt"
+  contents  = <<-EOF
+    import {
+      to = kubernetes_manifest.bootstrap_application[0]
+      id = "apiVersion=argoproj.io/v1alpha1,kind=Application,namespace=argocd,name=project-beta-runners-bootstrap"
+    }
+  EOF
+}
+
 # Dependency on Stage 1 - cluster must exist and provide kubeconfig
 dependency "cloudspace" {
   config_path = "../1-cloudspace"
