@@ -23,9 +23,7 @@ locals {
   # Secondary Cloudspace (Issue #117)
   # -----------------------------------------------------------------------------
   cluster_name_secondary = "matchpoint-runners-2"
-  min_nodes_secondary    = 2
-  max_nodes_secondary    = 12
-  # Same region, server_class, bid_price as primary
+  # Same region, server_class, min_nodes, max_nodes, bid_price as primary
 
   # -----------------------------------------------------------------------------
   # Runner settings (shared across both cloudspaces)
