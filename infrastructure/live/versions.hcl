@@ -13,7 +13,7 @@
 
 locals {
   # Remote modules from spot-argocd-cloudspace repository
-  # v4.3.0: Fixed helm provider syntax (kubernetes = {...} instead of kubernetes {...})
+  # v4.4.0: Ignore volatile nodepool fields to prevent provider errors
   remote_modules  = "git::https://github.com/Matchpoint-AI/spot-argocd-cloudspace.git"
-  modules_version = "v4.3.0"
+  modules_version = "v4.4.0"
 }
