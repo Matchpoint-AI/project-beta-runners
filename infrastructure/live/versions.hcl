@@ -15,7 +15,7 @@ locals {
   # Remote modules from spot-argocd-cloudspace repository
   # Contains: cloudspace, cluster-base, argocd-bootstrap
   remote_modules  = "git::https://github.com/Matchpoint-AI/spot-argocd-cloudspace.git"
-  modules_version = "v1.2.0"
+  modules_version = "v2.0.0"
 
   # Local modules path (relative to live/prod/<stage>)
   # Contains: arc-prereqs (ARC-specific)
