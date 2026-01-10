@@ -1,7 +1,11 @@
 # Stage 2: Cluster Base
 #
-# Installs ArgoCD using kubeconfig from Stage 1.
-# Only runs after Stage 1 confirms the cluster is ready.
+# Installs ArgoCD and creates bootstrap Application.
+# ArgoCD then manages everything else from Git manifests.
+#
+# After this stage, ArgoCD syncs from argocd/ directory:
+# - argocd/prereqs/      → Namespaces, ExternalSecrets
+# - argocd/applications/ → ARC controller, runners
 
 include "root" {
   path = find_in_parent_folders("root.hcl")
@@ -10,7 +14,7 @@ include "root" {
 # Load module version configuration
 locals {
   versions = read_terragrunt_config(find_in_parent_folders("versions.hcl"))
-  env_vars      = read_terragrunt_config(find_in_parent_folders("env-vars/prod.hcl"))
+  env_vars = read_terragrunt_config(find_in_parent_folders("env-vars/prod.hcl"))
 }
 
 # Reference the cluster-base module from remote repository
@@ -38,4 +42,11 @@ inputs = {
   cluster_ca_certificate = dependency.cloudspace.outputs.cluster_ca_certificate
   cluster_token          = dependency.cloudspace.outputs.cluster_token
   argocd_chart_version   = local.env_vars.locals.argocd_chart_version
+
+  # Bootstrap Application - ArgoCD syncs from this repo
+  bootstrap_enabled         = true
+  bootstrap_app_name        = "project-beta-runners-bootstrap"
+  bootstrap_repo_url        = "https://github.com/Matchpoint-AI/project-beta-runners"
+  bootstrap_sync_path       = "argocd/applications"
+  bootstrap_target_revision = "main"
 }

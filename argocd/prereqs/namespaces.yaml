@@ -1,0 +1,18 @@
+# ARC Namespaces
+# Managed by ArgoCD - synced from Git
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: arc-systems
+  labels:
+    app.kubernetes.io/component: arc-controller
+    app.kubernetes.io/managed-by: argocd
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: arc-runners
+  labels:
+    app.kubernetes.io/component: arc-runners
+    app.kubernetes.io/managed-by: argocd
