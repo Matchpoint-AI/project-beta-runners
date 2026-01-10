@@ -49,7 +49,7 @@ generate "providers" {
       token                  = "${dependency.cloudspace.outputs.cluster_token}"
     }
     provider "helm" {
-      kubernetes {
+      kubernetes = {
         host                   = "${dependency.cloudspace.outputs.cluster_endpoint}"
         cluster_ca_certificate = base64decode("${dependency.cloudspace.outputs.cluster_ca_certificate}")
         token                  = "${dependency.cloudspace.outputs.cluster_token}"
