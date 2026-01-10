@@ -14,13 +14,13 @@ include "root" {
 
 # Load module version and environment-specific configuration
 locals {
-  source_config = read_terragrunt_config(find_in_parent_folders("versions.hcl"))
+  versions = read_terragrunt_config(find_in_parent_folders("versions.hcl"))
   env_vars      = read_terragrunt_config(find_in_parent_folders("env-vars/prod.hcl"))
 }
 
 # Reference the cluster-base module from remote repository
 terraform {
-  source = "${local.source_config.locals.tf_modules_repo}//cluster-base?ref=${local.source_config.locals.tf_modules_version}"
+  source = "${local.versions.locals.remote_modules}//cluster-base?ref=${local.versions.locals.modules_version}"
 }
 
 # Dependency on Stage 1b - secondary cloudspace must exist and provide kubeconfig
