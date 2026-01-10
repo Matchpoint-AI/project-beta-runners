@@ -37,11 +37,29 @@ dependency "cloudspace" {
   mock_outputs_merge_strategy_with_state  = "shallow"
 }
 
+# Generate provider configuration for kubernetes and helm
+# This avoids provider connection issues during terraform init
+generate "providers" {
+  path      = "providers.tf"
+  if_exists = "overwrite_terragrunt"
+  contents  = <<-EOF
+    provider "kubernetes" {
+      host                   = "${dependency.cloudspace.outputs.cluster_endpoint}"
+      cluster_ca_certificate = base64decode("${dependency.cloudspace.outputs.cluster_ca_certificate}")
+      token                  = "${dependency.cloudspace.outputs.cluster_token}"
+    }
+    provider "helm" {
+      kubernetes = {
+        host                   = "${dependency.cloudspace.outputs.cluster_endpoint}"
+        cluster_ca_certificate = base64decode("${dependency.cloudspace.outputs.cluster_ca_certificate}")
+        token                  = "${dependency.cloudspace.outputs.cluster_token}"
+      }
+    }
+  EOF
+}
+
 inputs = {
-  cluster_endpoint       = dependency.cloudspace.outputs.cluster_endpoint
-  cluster_ca_certificate = dependency.cloudspace.outputs.cluster_ca_certificate
-  cluster_token          = dependency.cloudspace.outputs.cluster_token
-  argocd_chart_version   = local.env_vars.locals.argocd_chart_version
+  argocd_chart_version = local.env_vars.locals.argocd_chart_version
 
   # Bootstrap Application - ArgoCD syncs from this repo
   bootstrap_enabled         = true

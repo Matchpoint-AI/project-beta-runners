@@ -164,17 +164,15 @@ jobs:
         run: |
           set +e
 
-          # Determine which stages to exclude based on cluster connectivity
-          EXCLUDE_DIRS=""
-          if [ "${{ steps.cluster_check.outputs.cluster_reachable }}" != "true" ]; then
-            echo "::warning::Cluster unreachable - excluding 2-cluster-base from plan"
-            EXCLUDE_DIRS="--terragrunt-exclude-dir 2-cluster-base --terragrunt-exclude-dir 2-cluster-base-secondary"
-          fi
+          # Exclude cluster-base from CI plans
+          # The kubernetes provider requires actual cluster connection during plan,
+          # which doesn't work reliably in CI even with terragrunt generate blocks.
+          # Cluster-base is only applied during deploy workflow.
+          EXCLUDE_DIRS="--terragrunt-exclude-dir 2-cluster-base --terragrunt-exclude-dir 2-cluster-base-secondary"
+          echo "::notice::Excluding cluster-base stages from CI plan (applied only during deploy)"
 
-          # Run plan with appropriate exclusions
-          # 2-cluster-base(-secondary): excluded if cluster API is unreachable
+          # Run plan with exclusions
           # Using -lock=false because plans are read-only and shouldn't compete for state locks
-          # This allows CI to run even when a deploy is in progress
           terragrunt run-all plan -no-color -lock=false $EXCLUDE_DIRS 2>&1 | tee plan.txt
           exitcode=${PIPESTATUS[0]}
           echo "exitcode=$exitcode" >> $GITHUB_OUTPUT
