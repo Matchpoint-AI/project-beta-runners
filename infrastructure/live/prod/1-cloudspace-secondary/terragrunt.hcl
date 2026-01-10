@@ -26,7 +26,7 @@ inputs = {
   cluster_name = local.env_vars.locals.cluster_name_secondary
   region       = local.env_vars.locals.region
   server_class = local.env_vars.locals.server_class
-  min_nodes    = local.env_vars.locals.min_nodes_secondary
-  max_nodes    = local.env_vars.locals.max_nodes_secondary
+  min_nodes    = local.env_vars.locals.min_nodes
+  max_nodes    = local.env_vars.locals.max_nodes
   bid_price    = local.env_vars.locals.bid_price
 }
