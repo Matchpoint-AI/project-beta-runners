@@ -165,19 +165,14 @@ jobs:
           set +e
 
           # Determine which stages to exclude based on cluster connectivity
-          # Exclude stages that require kubernetes_manifest or pending state migration
-          EXCLUDE_DIRS="--terragrunt-exclude-dir 3-argocd-apps"
-          EXCLUDE_DIRS="$EXCLUDE_DIRS --terragrunt-exclude-dir 3-arc-prereqs"
-          EXCLUDE_DIRS="$EXCLUDE_DIRS --terragrunt-exclude-dir 4-argocd-bootstrap"
+          EXCLUDE_DIRS=""
           if [ "${{ steps.cluster_check.outputs.cluster_reachable }}" != "true" ]; then
             echo "::warning::Cluster unreachable - excluding 2-cluster-base from plan"
-            EXCLUDE_DIRS="$EXCLUDE_DIRS --terragrunt-exclude-dir 2-cluster-base"
+            EXCLUDE_DIRS="--terragrunt-exclude-dir 2-cluster-base --terragrunt-exclude-dir 2-cluster-base-secondary"
           fi
 
           # Run plan with appropriate exclusions
-          # 3-argocd-apps: deprecated, replaced by 3-arc-prereqs + 4-argocd-bootstrap
-          # 3-arc-prereqs, 4-argocd-bootstrap: require state migration before CI can plan
-          # 2-cluster-base: excluded if cluster API is unreachable
+          # 2-cluster-base(-secondary): excluded if cluster API is unreachable
           # Using -lock=false because plans are read-only and shouldn't compete for state locks
           # This allows CI to run even when a deploy is in progress
           terragrunt run-all plan -no-color -lock=false $EXCLUDE_DIRS 2>&1 | tee plan.txt

@@ -43,4 +43,11 @@ inputs = {
   cluster_ca_certificate = dependency.cloudspace.outputs.cluster_ca_certificate
   cluster_token          = dependency.cloudspace.outputs.cluster_token
   argocd_chart_version   = local.env_vars.locals.argocd_chart_version
+
+  # Bootstrap Application - ArgoCD syncs from this repo
+  bootstrap_enabled         = true
+  bootstrap_app_name        = "project-beta-runners-bootstrap-secondary"
+  bootstrap_repo_url        = "https://github.com/Matchpoint-AI/project-beta-runners"
+  bootstrap_sync_path       = "argocd/applications"
+  bootstrap_target_revision = "main"
 }

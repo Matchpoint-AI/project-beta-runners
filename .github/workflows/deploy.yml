@@ -115,7 +115,7 @@ jobs:
         run: |
           echo "Workflow cancelled - checking for locks held by THIS workflow..."
           CURRENT_RUNNER=$(hostname)
-          for stage in 1-cloudspace 2-cluster-base 3-argocd-apps; do
+          for stage in 1-cloudspace 1-cloudspace-secondary 2-cluster-base 2-cluster-base-secondary; do
             LOCK_PATH="gs://${GCS_BUCKET}/runners/prod/${stage}/default.tflock"
             if gcloud storage cat "${LOCK_PATH}" > /tmp/lockinfo.json 2>/dev/null; then
               LOCK_HOLDER=$(jq -r '.Who // "unknown"' /tmp/lockinfo.json 2>/dev/null || echo "unknown")
