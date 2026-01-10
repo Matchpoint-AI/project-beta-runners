@@ -17,12 +17,12 @@ include "root" {
 
 # Load module version configuration
 locals {
-  source_config = read_terragrunt_config(find_in_parent_folders("versions.hcl"))
+  versions = read_terragrunt_config(find_in_parent_folders("versions.hcl"))
 }
 
 # Reference the argocd-apps module from remote repository
 terraform {
-  source = "${local.source_config.locals.tf_modules_repo}//argocd-apps?ref=${local.source_config.locals.tf_modules_version}"
+  source = "${local.versions.locals.remote_modules}//argocd-apps?ref=${local.versions.locals.modules_version}"
 }
 
 # Dependency on Stage 1b - need kubeconfig to talk to secondary cluster

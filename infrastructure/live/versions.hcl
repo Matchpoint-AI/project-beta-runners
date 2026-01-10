@@ -5,19 +5,19 @@
 #
 # Usage in terragrunt.hcl:
 #   locals {
-#     source_config = read_terragrunt_config(find_in_parent_folders("versions.hcl"))
+#     versions = read_terragrunt_config(find_in_parent_folders("versions.hcl"))
 #   }
 #   terraform {
-#     source = "${local.source_config.locals.tf_modules_repo}//module-name?ref=${local.source_config.locals.tf_modules_version}"
+#     source = "${local.versions.locals.remote_modules}/cloudspace?ref=${local.versions.locals.modules_version}"
 #   }
 
 locals {
-  # Module repository configuration
-  # Using HTTPS for CI compatibility (SSH not configured for agents)
-  tf_modules_base    = "github.com/Matchpoint-AI/spot-argocd-cloudspace.git"
-  tf_modules_repo    = "git::https://${local.tf_modules_base}"
+  # Remote modules from spot-argocd-cloudspace repository
+  # Contains: cloudspace, cluster-base, argocd-bootstrap
+  remote_modules  = "git::https://github.com/Matchpoint-AI/spot-argocd-cloudspace.git"
+  modules_version = "v1.2.0"
 
-  # Centralized version pin
-  # Change this to upgrade all modules at once
-  tf_modules_version = "v1.1.2"
+  # Local modules path (relative to live/prod/<stage>)
+  # Contains: arc-prereqs (ARC-specific)
+  local_modules = "${get_parent_terragrunt_dir()}/../modules"
 }

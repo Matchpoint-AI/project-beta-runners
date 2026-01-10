@@ -9,13 +9,13 @@ include "root" {
 
 # Load module version configuration
 locals {
-  source_config = read_terragrunt_config(find_in_parent_folders("versions.hcl"))
+  versions = read_terragrunt_config(find_in_parent_folders("versions.hcl"))
   env_vars      = read_terragrunt_config(find_in_parent_folders("env-vars/prod.hcl"))
 }
 
 # Reference the cloudspace module from remote repository
 terraform {
-  source = "${local.source_config.locals.tf_modules_repo}//cloudspace?ref=${local.source_config.locals.tf_modules_version}"
+  source = "${local.versions.locals.remote_modules}//cloudspace?ref=${local.versions.locals.modules_version}"
 }
 
 inputs = {

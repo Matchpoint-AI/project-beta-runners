@@ -13,12 +13,12 @@ include "root" {
 
 # Load module version configuration
 locals {
-  source_config = read_terragrunt_config(find_in_parent_folders("versions.hcl"))
+  versions = read_terragrunt_config(find_in_parent_folders("versions.hcl"))
 }
 
-# Reference the arc-prereqs module from remote repository
+# Use LOCAL arc-prereqs module (ARC-specific, not in remote repo)
 terraform {
-  source = "${local.source_config.locals.tf_modules_repo}//arc-prereqs?ref=${local.source_config.locals.tf_modules_version}"
+  source = "${local.versions.locals.local_modules}//arc-prereqs"
 }
 
 # Dependency on Stage 1 - need kubeconfig to talk to cluster
