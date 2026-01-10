@@ -13,7 +13,7 @@
 
 locals {
   # Remote modules from spot-argocd-cloudspace repository
-  # v4.4.0: Ignore volatile nodepool fields to prevent provider errors
+  # v4.4.1: Wait for cloudspace Ready after scaling changes
   remote_modules  = "git::https://github.com/Matchpoint-AI/spot-argocd-cloudspace.git"
-  modules_version = "v4.4.0"
+  modules_version = "v4.4.1"
 }
