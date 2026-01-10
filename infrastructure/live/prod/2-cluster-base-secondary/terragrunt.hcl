@@ -12,9 +12,10 @@ include "root" {
   path = find_in_parent_folders("root.hcl")
 }
 
-# Load module version configuration
+# Load module version and environment-specific configuration
 locals {
   source_config = read_terragrunt_config(find_in_parent_folders("versions.hcl"))
+  env_vars      = read_terragrunt_config(find_in_parent_folders("env-vars/prod.hcl"))
 }
 
 # Reference the cluster-base module from remote repository
@@ -35,11 +36,6 @@ dependency "cloudspace" {
   }
   mock_outputs_allowed_terraform_commands = ["validate", "plan"]
   mock_outputs_merge_strategy_with_state  = "shallow"
-}
-
-# Load environment-specific variables
-locals {
-  env_vars = read_terragrunt_config(find_in_parent_folders("env-vars/prod.hcl"))
 }
 
 inputs = {
