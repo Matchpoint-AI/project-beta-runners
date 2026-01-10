@@ -13,7 +13,7 @@
 
 locals {
   # Remote modules from spot-argocd-cloudspace repository
-  # v4.1.0: Provider config via terragrunt generate (fixes CI connection issues)
+  # v4.2.0: Provider config in module with variable inputs (fixes localhost connection error)
   remote_modules  = "git::https://github.com/Matchpoint-AI/spot-argocd-cloudspace.git"
-  modules_version = "v4.1.0"
+  modules_version = "v4.2.0"
 }
