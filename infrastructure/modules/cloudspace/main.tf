@@ -192,7 +192,7 @@ resource "terraform_data" "wait_for_nodepool" {
           STATUS=$(echo "$STATUS_JSON" | jq -r '.status // "Unknown"')
 
           case "$STATUS" in
-            "Ready"|"Healthy"|"Running"|"Active")
+            "Ready"|"Healthy"|"Running"|"Active"|"Fulfilled")
               echo "✅ Nodepool ready: $STATUS"
               exit 0
               ;;
