@@ -14,10 +14,10 @@
 locals {
   # Module repository configuration
   # Using HTTPS for CI compatibility (SSH not configured for agents)
-  tf_modules_base    = "github.com/Matchpoint-AI/rackspace-spot-terraform-modules.git"
+  tf_modules_base    = "github.com/Matchpoint-AI/spot-argocd-cloudspace.git"
   tf_modules_repo    = "git::https://${local.tf_modules_base}"
 
   # Centralized version pin
   # Change this to upgrade all modules at once
-  tf_modules_version = "v1.0.0"
+  tf_modules_version = "v1.1.0"
 }
