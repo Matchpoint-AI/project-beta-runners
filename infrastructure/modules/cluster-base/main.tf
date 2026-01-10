@@ -39,7 +39,7 @@ provider "helm" {
 # -----------------------------------------------------------------------------
 resource "kubernetes_namespace_v1" "argocd" {
   metadata {
-    name = "argocd"
+    name = var.argocd_namespace
   }
 }
 
@@ -54,19 +54,19 @@ resource "helm_release" "argocd" {
   namespace  = kubernetes_namespace_v1.argocd.metadata[0].name
 
   wait    = true
-  timeout = 600 # 10 minutes
+  timeout = var.argocd_helm_timeout
 
   values = [yamlencode({
     server = {
       service = {
-        type = "ClusterIP"
+        type = var.argocd_service_type
       }
     }
     dex = {
-      enabled = false
+      enabled = var.argocd_dex_enabled
     }
     repoServer = {
-      replicas = 1
+      replicas = var.argocd_repo_server_replicas
     }
   })]
 

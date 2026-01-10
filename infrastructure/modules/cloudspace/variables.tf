@@ -45,3 +45,39 @@ variable "bid_price" {
   }
 }
 
+# -----------------------------------------------------------------------------
+# spotctl Configuration
+# -----------------------------------------------------------------------------
+variable "spotctl_version" {
+  description = "Version of spotctl CLI to install if not present"
+  type        = string
+  default     = "v0.1.1"
+}
+
+# -----------------------------------------------------------------------------
+# Polling Configuration
+# -----------------------------------------------------------------------------
+variable "cloudspace_poll_max_attempts" {
+  description = "Maximum polling attempts for cloudspace to become ready (30s intervals)"
+  type        = number
+  default     = 240 # 2 hours max
+}
+
+variable "cloudspace_poll_interval" {
+  description = "Seconds between cloudspace status polling attempts"
+  type        = number
+  default     = 30
+}
+
+variable "nodepool_poll_max_attempts" {
+  description = "Maximum polling attempts for nodepool to become ready (30s intervals)"
+  type        = number
+  default     = 60 # 30 minutes max
+}
+
+variable "nodepool_poll_interval" {
+  description = "Seconds between nodepool status polling attempts"
+  type        = number
+  default     = 30
+}
+

@@ -27,9 +27,9 @@ provider "kubernetes" {
 }
 
 locals {
-  arc_namespace    = "arc-systems"
-  runner_namespace = "arc-runners"
-  argocd_namespace = "argocd"
+  arc_namespace    = var.arc_namespace
+  runner_namespace = var.arc_runners_namespace
+  argocd_namespace = var.argocd_namespace
 }
 
 # -----------------------------------------------------------------------------
@@ -57,7 +57,7 @@ resource "kubernetes_namespace_v1" "arc_runners" {
 # -----------------------------------------------------------------------------
 resource "kubernetes_secret_v1" "github_token" {
   metadata {
-    name      = "arc-org-github-secret"
+    name      = var.github_secret_name
     namespace = local.runner_namespace
   }
 
@@ -80,7 +80,7 @@ resource "kubernetes_manifest" "bootstrap_application" {
     apiVersion = "argoproj.io/v1alpha1"
     kind       = "Application"
     metadata = {
-      name      = "project-beta-runners-bootstrap"
+      name      = var.bootstrap_app_name
       namespace = local.argocd_namespace
       finalizers = [
         "resources-finalizer.argocd.argoproj.io"
@@ -91,7 +91,7 @@ resource "kubernetes_manifest" "bootstrap_application" {
       source = {
         repoURL        = var.repo_url
         targetRevision = var.target_revision
-        path           = "argocd/applications"
+        path           = var.argocd_sync_path
       }
       destination = {
         server    = "https://kubernetes.default.svc"
@@ -99,8 +99,8 @@ resource "kubernetes_manifest" "bootstrap_application" {
       }
       syncPolicy = {
         automated = {
-          prune    = true
-          selfHeal = true
+          prune    = var.argocd_auto_prune
+          selfHeal = var.argocd_self_heal
         }
         syncOptions = [
           "CreateNamespace=true"
