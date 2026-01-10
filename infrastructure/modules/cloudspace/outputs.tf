@@ -86,10 +86,10 @@ output "ha_status" {
       nodepool_name   = spot_spotnodepool.secondary[0].name
     }
     gate_passed = terraform_data.ha_gate[0].id != ""
-  } : {
-    enabled   = false
-    primary   = null
-    secondary = null
+    } : {
+    enabled     = false
+    primary     = null
+    secondary   = null
     gate_passed = false
   }
 }
@@ -152,7 +152,7 @@ output "cloudspaces" {
       endpoint   = try(local.secondary_kubeconfig["clusters"][0]["cluster"]["server"], "")
       kubeconfig = local.secondary_kubeconfig_raw
     }
-  } : {
+    } : {
     primary = {
       name       = spot_cloudspace.primary.cloudspace_name
       region     = spot_cloudspace.primary.region
