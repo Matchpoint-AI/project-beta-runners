@@ -19,5 +19,5 @@ locals {
 
   # Centralized version pin
   # Change this to upgrade all modules at once
-  tf_modules_version = "v1.1.0"
+  tf_modules_version = "v1.1.2"
 }
