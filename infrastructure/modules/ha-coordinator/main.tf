@@ -35,14 +35,14 @@ locals {
   # Detailed status message for operators
   ha_status_message = local.ha_gate_passed ? (
     "HA is ACTIVE. Both cloudspaces are healthy and accepting workloads."
-  ) : (
+    ) : (
     !var.ha_enabled ? "HA is DISABLED by configuration." : (
       !var.primary_cloudspace_ready && !var.secondary_cloudspace_ready ? (
         "HA is BLOCKED. Neither cloudspace is ready. Check provisioning status."
-      ) : (
+        ) : (
         !var.primary_cloudspace_ready ? (
           "HA is BLOCKED. Primary cloudspace (${var.primary_cloudspace_name}) is not ready."
-        ) : (
+          ) : (
           "HA is BLOCKED. Secondary cloudspace (${var.secondary_cloudspace_name}) is not ready."
         )
       )
@@ -68,7 +68,7 @@ locals {
   # Total effective nodes across both cloudspaces
   total_effective_nodes = local.ha_gate_passed ? (
     local.effective_nodes_per_cloudspace * 2
-  ) : (
+    ) : (
     var.primary_cloudspace_ready ? var.primary_node_count : 0
   )
 
@@ -82,7 +82,7 @@ locals {
     constraining_side = var.primary_node_count < var.secondary_node_count ? "primary" : (
       var.secondary_node_count < var.primary_node_count ? "secondary" : "none"
     )
-  } : {
+    } : {
     primary_actual    = var.primary_node_count
     secondary_actual  = var.secondary_node_count
     effective_each    = 0

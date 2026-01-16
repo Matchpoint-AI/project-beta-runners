@@ -39,16 +39,16 @@ output "cloudspaces" {
   description = "Cloudspace configuration and health summary"
   value = {
     primary = {
-      name   = var.primary_cloudspace_name
-      ready  = var.primary_cloudspace_ready
-      nodes  = var.primary_node_count
-      max    = var.primary_max_nodes
+      name  = var.primary_cloudspace_name
+      ready = var.primary_cloudspace_ready
+      nodes = var.primary_node_count
+      max   = var.primary_max_nodes
     }
     secondary = {
-      name   = var.secondary_cloudspace_name
-      ready  = var.secondary_cloudspace_ready
-      nodes  = var.secondary_node_count
-      max    = var.secondary_max_nodes
+      name  = var.secondary_cloudspace_name
+      ready = var.secondary_cloudspace_ready
+      nodes = var.secondary_node_count
+      max   = var.secondary_max_nodes
     }
   }
 }
@@ -93,15 +93,15 @@ output "capacity_utilization_percent" {
 output "ha_summary" {
   description = "Complete HA status summary for monitoring and alerting"
   value = {
-    timestamp               = timestamp()
-    ha_enabled              = var.ha_enabled
-    ha_active               = local.ha_gate_passed
-    ha_status               = local.ha_status
-    ha_status_message       = local.ha_status_message
-    total_effective_nodes   = local.total_effective_nodes
-    capacity_utilization    = "${format("%.1f", local.capacity_utilization)}%"
-    primary_cloudspace      = var.primary_cloudspace_name
-    secondary_cloudspace    = var.secondary_cloudspace_name
-    node_balance            = local.node_balance_details
+    timestamp             = timestamp()
+    ha_enabled            = var.ha_enabled
+    ha_active             = local.ha_gate_passed
+    ha_status             = local.ha_status
+    ha_status_message     = local.ha_status_message
+    total_effective_nodes = local.total_effective_nodes
+    capacity_utilization  = "${format("%.1f", local.capacity_utilization)}%"
+    primary_cloudspace    = var.primary_cloudspace_name
+    secondary_cloudspace  = var.secondary_cloudspace_name
+    node_balance          = local.node_balance_details
   }
 }
