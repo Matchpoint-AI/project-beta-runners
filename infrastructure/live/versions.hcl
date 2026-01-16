@@ -16,4 +16,8 @@ locals {
   # v4.4.1: Wait for cloudspace Ready after scaling changes
   remote_modules  = "git::https://github.com/Matchpoint-AI/spot-argocd-cloudspace.git"
   modules_version = "v4.4.1"
+
+  # Local modules in this repository
+  # Used for: ha-coordinator
+  local_modules = "${get_parent_terragrunt_dir()}/../modules"
 }

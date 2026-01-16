@@ -1,14 +1,24 @@
 # Production environment configuration
 #
-# Dual Cloudspace Architecture (Issue #117)
-# =========================================
+# Dual Cloudspace Architecture (Issue #117, #121)
+# ===============================================
 # Two cloudspaces for high availability and rolling maintenance:
 # - Primary: Original cloudspace (keep running during secondary provisioning)
 # - Secondary: New cloudspace (provision first, then rebalance primary)
 #
-# Total capacity: 24 max nodes split across both cloudspaces (12 each)
+# HA Mode (Issue #121):
+# - Both cloudspaces must be provisioned and Ready before HA activates
+# - Node count balanced using min(primary, secondary) formula
+# - Total capacity: 24 max nodes split across both cloudspaces (12 each)
 
 locals {
+  # -----------------------------------------------------------------------------
+  # High Availability Configuration (Issue #121)
+  # -----------------------------------------------------------------------------
+  # HA mode requires both cloudspaces to be provisioned and ready.
+  # Set to false to disable HA coordination (single cloudspace mode).
+  ha_enabled = true
+
   # -----------------------------------------------------------------------------
   # Primary Cloudspace (existing)
   # -----------------------------------------------------------------------------
@@ -24,6 +34,7 @@ locals {
   # -----------------------------------------------------------------------------
   cluster_name_secondary = "matchpoint-runners-2"
   # Same region, server_class, min_nodes, max_nodes, bid_price as primary
+  # This ensures balanced capacity across both cloudspaces
 
   # -----------------------------------------------------------------------------
   # Runner settings (shared across both cloudspaces)
