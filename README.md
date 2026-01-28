@@ -9,6 +9,57 @@ Self-hosted GitHub Actions runner infrastructure for the Project Beta ecosystem.
 
 ---
 
+## Hub-and-Spoke Architecture Context
+
+Project Beta uses a **hub-and-spoke architecture** where the API serves as the central control plane (hub) orchestrating various specialized services (spokes) and clients.
+
+While this runners repository is not part of the runtime architecture, it provides the **CI/CD infrastructure** that deploys and maintains all components of the system:
+
+```mermaid
+graph TB
+    subgraph "CI/CD Runners"
+        R[GitHub Actions Runners]
+    end
+    subgraph "Deployed Services"
+        subgraph "Hub"
+            API[API]
+        end
+        subgraph "Spokes"
+            CD[Content Designer]
+            PG[Post Generator]
+            BC[Brand Crawler]
+            CP[Campaign Publisher]
+        end
+        subgraph "Clients"
+            FE[Frontend]
+            SB[Slack Bot]
+        end
+    end
+    R -->|deploy| API
+    R -->|deploy| CD
+    R -->|deploy| PG
+    R -->|deploy| BC
+    R -->|deploy| CP
+    R -->|deploy| FE
+    R -->|deploy| SB
+```
+
+### Component Overview
+
+| Category | Service | Repository | Description |
+|----------|---------|------------|-------------|
+| **Hub** | API | `project-beta-api` | Central control plane orchestrating all services |
+| **Spoke** | Content Designer | `project-beta-agentic-content-designer` | Planning and meta-prompt generation |
+| **Spoke** | Post Generator | `project-beta-post-generator` | Text/image/video generation execution |
+| **Spoke** | Brand Crawler | `project-beta-agentic-brand-crawler` | Brand data extraction |
+| **Spoke** | Campaign Publisher | `project-beta-campaign-publisher` | Campaign publishing to platforms |
+| **Client** | Frontend | `project-beta-frontend` | React web application |
+| **Client** | Slack Bot | `project-beta-slack-bot` | Slack integration |
+
+The runners execute CI/CD workflows for all these repositories, ensuring consistent build, test, and deployment pipelines across the entire ecosystem.
+
+---
+
 ## Quick Start for Developers
 
 **Using the runners in your workflow:**
