@@ -20,6 +20,13 @@ locals {
 # Reference the cluster-base module from remote repository
 terraform {
   source = "${local.versions.locals.remote_modules}//cluster-base?ref=${local.versions.locals.modules_version}"
+
+  # State migration: Remove old kubernetes_manifest before apply
+  # The module changed from kubernetes_manifest to kubectl_manifest
+  before_hook "remove_old_state" {
+    commands = ["apply"]
+    execute  = ["bash", "-c", "tofu state rm 'kubernetes_manifest.bootstrap_application[0]' 2>/dev/null || true"]
+  }
 }
 
 # Dependency on Stage 1 - cluster must exist and provide kubeconfig
