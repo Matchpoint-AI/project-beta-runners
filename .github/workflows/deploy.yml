@@ -95,7 +95,11 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      - name: Terragrunt Apply All
+      # Deploy clusters independently for HA resilience
+      # If one cluster is down, the other should still be deployed
+      - name: Deploy Primary Cluster
+        id: primary
+        continue-on-error: true
         working-directory: infrastructure/live/prod
         env:
           GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
@@ -104,9 +108,56 @@ jobs:
           INFRA_GH_TOKEN: ${{ secrets.INFRA_GH_TOKEN }}
           TF_IN_AUTOMATION: true
         run: |
-          echo "Deploying infrastructure..."
-          echo "Pre-flight status: ${{ steps.preflight.outputs.cloudspace_status }}"
-          terragrunt run-all apply -auto-approve --terragrunt-non-interactive -lock-timeout=120m
+          echo "=== Deploying Primary Cluster ==="
+          terragrunt apply -auto-approve --terragrunt-non-interactive -lock-timeout=120m --terragrunt-working-dir 1-cloudspace || exit 1
+          terragrunt apply -auto-approve --terragrunt-non-interactive -lock-timeout=120m --terragrunt-working-dir 2-cluster-base || exit 1
+
+      - name: Deploy Secondary Cluster
+        id: secondary
+        continue-on-error: true
+        working-directory: infrastructure/live/prod
+        env:
+          GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
+          INFRA_GH_TOKEN: ${{ secrets.INFRA_GH_TOKEN }}
+          TF_IN_AUTOMATION: true
+        run: |
+          echo "=== Deploying Secondary Cluster ==="
+          terragrunt apply -auto-approve --terragrunt-non-interactive -lock-timeout=120m --terragrunt-working-dir 1-cloudspace-secondary || exit 1
+          terragrunt apply -auto-approve --terragrunt-non-interactive -lock-timeout=120m --terragrunt-working-dir 2-cluster-base-secondary || exit 1
+
+      - name: Deploy HA Coordinator
+        continue-on-error: true
+        working-directory: infrastructure/live/prod
+        env:
+          GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          TF_IN_AUTOMATION: true
+        run: |
+          echo "=== Deploying HA Coordinator ==="
+          terragrunt apply -auto-approve --terragrunt-non-interactive -lock-timeout=120m --terragrunt-working-dir 3-ha-coordinator || true
+
+      - name: Check Deployment Status
+        if: always()
+        run: |
+          echo "=== Deployment Summary ==="
+          if [ "${{ steps.primary.outcome }}" == "success" ]; then
+            echo "✅ Primary cluster: SUCCESS"
+          else
+            echo "❌ Primary cluster: FAILED"
+          fi
+          if [ "${{ steps.secondary.outcome }}" == "success" ]; then
+            echo "✅ Secondary cluster: SUCCESS"
+          else
+            echo "❌ Secondary cluster: FAILED"
+          fi
+          # Fail the workflow only if BOTH clusters failed
+          if [ "${{ steps.primary.outcome }}" != "success" ] && [ "${{ steps.secondary.outcome }}" != "success" ]; then
+            echo "::error::Both clusters failed to deploy!"
+            exit 1
+          fi
+          echo "At least one cluster deployed successfully - runners should be available"
 
       - name: Release OUR state locks on cancel
         if: cancelled()
