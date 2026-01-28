@@ -22,23 +22,6 @@ terraform {
   source = "${local.versions.locals.remote_modules}//cluster-base?ref=${local.versions.locals.modules_version}"
 }
 
-# State migration: kubernetes_manifest -> kubectl_manifest
-# The module now uses kubectl_manifest instead of kubernetes_manifest.
-# Remove the old resource from state and let kubectl_manifest adopt the existing Application.
-# Note: The existing Application in the cluster will be adopted by kubectl_manifest.
-generate "migration" {
-  path      = "migration.tf"
-  if_exists = "overwrite_terragrunt"
-  contents  = <<-EOF
-    # Remove old kubernetes_manifest from state (resource changed to kubectl_manifest)
-    # The 'destroy = false' ensures the actual K8s resource is not deleted
-    removed {
-      from    = kubernetes_manifest.bootstrap_application
-      destroy = false
-    }
-  EOF
-}
-
 # Dependency on Stage 1 - cluster must exist and provide kubeconfig
 dependency "cloudspace" {
   config_path = "../1-cloudspace"
