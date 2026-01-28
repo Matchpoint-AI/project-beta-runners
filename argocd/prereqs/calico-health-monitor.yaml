@@ -1,0 +1,106 @@
+# Calico Health Monitor
+# Auto-remediation for calico-kube-controllers instability (Issue #160)
+#
+# Problem: When calico-kube-controllers becomes unstable (frequent restarts),
+# new pods cannot get network sandboxes created, causing complete CI outage.
+#
+# Solution: Monitor restart count and auto-restart if threshold exceeded.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: calico-health-monitor
+  namespace: calico-system
+  labels:
+    app.kubernetes.io/name: calico-health-monitor
+    app.kubernetes.io/component: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: calico-health-monitor
+  namespace: calico-system
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: calico-health-monitor
+  namespace: calico-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: calico-health-monitor
+subjects:
+  - kind: ServiceAccount
+    name: calico-health-monitor
+    namespace: calico-system
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: calico-health-monitor
+  namespace: calico-system
+  labels:
+    app.kubernetes.io/name: calico-health-monitor
+    app.kubernetes.io/component: monitoring
+spec:
+  schedule: "*/5 * * * *"  # Every 5 minutes
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 120
+      template:
+        spec:
+          serviceAccountName: calico-health-monitor
+          restartPolicy: Never
+          containers:
+            - name: health-check
+              image: bitnami/kubectl:1.31
+              resources:
+                requests:
+                  cpu: "50m"
+                  memory: "64Mi"
+                limits:
+                  cpu: "100m"
+                  memory: "128Mi"
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  set -e
+
+                  # Configuration
+                  RESTART_THRESHOLD=10
+                  DEPLOYMENT="calico-kube-controllers"
+
+                  echo "Checking $DEPLOYMENT health..."
+
+                  # Get restart count
+                  RESTARTS=$(kubectl get pod -n calico-system \
+                    -l k8s-app=calico-kube-controllers \
+                    -o jsonpath='{.items[0].status.containerStatuses[0].restartCount}' 2>/dev/null || echo "0")
+
+                  echo "Current restart count: $RESTARTS (threshold: $RESTART_THRESHOLD)"
+
+                  if [ "$RESTARTS" -gt "$RESTART_THRESHOLD" ]; then
+                    echo "WARNING: Restart threshold exceeded!"
+                    echo "Triggering rolling restart of $DEPLOYMENT..."
+
+                    # Trigger rolling restart by updating annotation
+                    kubectl patch deployment $DEPLOYMENT -n calico-system \
+                      -p "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"calico-health-monitor/restartedAt\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}}}}}"
+
+                    echo "Rolling restart initiated. New pods will have fresh restart count."
+                  else
+                    echo "Health check passed."
+                  fi
