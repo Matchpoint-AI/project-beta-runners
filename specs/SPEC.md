@@ -23,7 +23,7 @@ The runners deploy the following components:
 | Hub | API (`project-beta-api`) | Cloud Run |
 | Spoke | Content Designer (`project-beta-content-designer`) | Cloud Run |
 | Spoke | Post Generator (`project-beta-post-generator`) | Cloud Run |
-| Spoke | Brand Crawler (`project-beta-agentic-brand-crawler`) | Cloud Run |
+| Spoke | Brand Crawler (`project-beta-brand-crawler`) | Cloud Run |
 | Spoke | Campaign Publisher (`project-beta-campaign-publisher`) | Cloud Run |
 | Client | Frontend (`project-beta-frontend`) | Cloud Run / CDN |
 | Client | Slack Bot (`project-beta-slack-bot`) | Cloud Run |
