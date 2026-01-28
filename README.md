@@ -49,7 +49,7 @@ graph TB
 | Category | Service | Repository | Description |
 |----------|---------|------------|-------------|
 | **Hub** | API | `project-beta-api` | Central control plane orchestrating all services |
-| **Spoke** | Content Designer | `project-beta-agentic-content-designer` | Planning and meta-prompt generation |
+| **Spoke** | Content Designer | `project-beta-content-designer` | Planning and meta-prompt generation |
 | **Spoke** | Post Generator | `project-beta-post-generator` | Text/image/video generation execution |
 | **Spoke** | Brand Crawler | `project-beta-agentic-brand-crawler` | Brand data extraction |
 | **Spoke** | Campaign Publisher | `project-beta-campaign-publisher` | Campaign publishing to platforms |
