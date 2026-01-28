@@ -1,0 +1,123 @@
+name: GitHub API Rate Limit Monitor
+
+on:
+  schedule:
+    # Run every 15 minutes
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    # Allow manual trigger for testing
+
+jobs:
+  check-rate-limit:
+    name: Check GitHub API Rate Limit
+    # Use ubuntu-latest for independence from self-hosted runners
+    # This ensures monitoring continues even if self-hosted runners are affected
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check Rate Limit
+        id: rate-limit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Fetch rate limit data
+          RATE_LIMIT_JSON=$(gh api rate_limit)
+
+          # Extract core rate limit values (most commonly hit)
+          CORE_LIMIT=$(echo "$RATE_LIMIT_JSON" | jq '.resources.core.limit')
+          CORE_REMAINING=$(echo "$RATE_LIMIT_JSON" | jq '.resources.core.remaining')
+          CORE_RESET=$(echo "$RATE_LIMIT_JSON" | jq '.resources.core.reset')
+
+          # Extract search rate limit values
+          SEARCH_LIMIT=$(echo "$RATE_LIMIT_JSON" | jq '.resources.search.limit')
+          SEARCH_REMAINING=$(echo "$RATE_LIMIT_JSON" | jq '.resources.search.remaining')
+
+          # Extract GraphQL rate limit values
+          GRAPHQL_LIMIT=$(echo "$RATE_LIMIT_JSON" | jq '.resources.graphql.limit')
+          GRAPHQL_REMAINING=$(echo "$RATE_LIMIT_JSON" | jq '.resources.graphql.remaining')
+
+          # Calculate reset time in human readable format
+          RESET_TIME=$(date -d "@$CORE_RESET" '+%Y-%m-%d %H:%M:%S UTC' 2>/dev/null || date -r "$CORE_RESET" '+%Y-%m-%d %H:%M:%S UTC')
+
+          echo "=== GitHub API Rate Limit Status ==="
+          echo ""
+          echo "Core API:"
+          echo "  Remaining: $CORE_REMAINING / $CORE_LIMIT"
+          echo "  Reset at: $RESET_TIME"
+          echo ""
+          echo "Search API:"
+          echo "  Remaining: $SEARCH_REMAINING / $SEARCH_LIMIT"
+          echo ""
+          echo "GraphQL API:"
+          echo "  Remaining: $GRAPHQL_REMAINING / $GRAPHQL_LIMIT"
+          echo ""
+
+          # Set outputs for subsequent steps
+          echo "core_remaining=$CORE_REMAINING" >> $GITHUB_OUTPUT
+          echo "core_limit=$CORE_LIMIT" >> $GITHUB_OUTPUT
+          echo "reset_time=$RESET_TIME" >> $GITHUB_OUTPUT
+
+          # Determine status level
+          if [ "$CORE_REMAINING" -lt 500 ]; then
+            echo "status=critical" >> $GITHUB_OUTPUT
+            echo "::error::CRITICAL: GitHub API rate limit critically low! Only $CORE_REMAINING requests remaining."
+          elif [ "$CORE_REMAINING" -lt 1000 ]; then
+            echo "status=warning" >> $GITHUB_OUTPUT
+            echo "::warning::WARNING: GitHub API rate limit getting low. $CORE_REMAINING requests remaining."
+          else
+            echo "status=ok" >> $GITHUB_OUTPUT
+            echo "Rate limit status: OK ($CORE_REMAINING remaining)"
+          fi
+
+      - name: Create Issue on Critical
+        if: steps.rate-limit.outputs.status == 'critical'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Check if an open issue already exists to avoid duplicates
+          EXISTING_ISSUE=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --state open \
+            --label "rate-limit-alert" \
+            --json number \
+            --jq '.[0].number // empty')
+
+          if [ -z "$EXISTING_ISSUE" ]; then
+            gh issue create \
+              --repo ${{ github.repository }} \
+              --title "CRITICAL: GitHub API Rate Limit Exhaustion Risk" \
+              --label "rate-limit-alert,P0" \
+              --body "## Rate Limit Alert
+
+**Status:** CRITICAL
+
+**Core API Remaining:** ${{ steps.rate-limit.outputs.core_remaining }} / ${{ steps.rate-limit.outputs.core_limit }}
+**Reset Time:** ${{ steps.rate-limit.outputs.reset_time }}
+
+### Impact
+GitHub API rate limit is critically low. CI operations may start failing.
+
+### Recommended Actions
+1. Identify high-frequency API consumers
+2. Consider pausing non-critical workflows
+3. Wait for rate limit reset at the time indicated above
+
+---
+*This issue was automatically created by the rate limit monitoring workflow.*"
+            echo "Created new rate limit alert issue"
+          else
+            echo "Rate limit alert issue #$EXISTING_ISSUE already exists, skipping creation"
+            gh issue comment "$EXISTING_ISSUE" \
+              --repo ${{ github.repository }} \
+              --body "**Update:** Rate limit still critical. Remaining: ${{ steps.rate-limit.outputs.core_remaining }}. Reset at: ${{ steps.rate-limit.outputs.reset_time }}"
+          fi
+
+      - name: Summary
+        run: |
+          echo "## Rate Limit Check Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Status | ${{ steps.rate-limit.outputs.status }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Core Remaining | ${{ steps.rate-limit.outputs.core_remaining }} / ${{ steps.rate-limit.outputs.core_limit }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Reset Time | ${{ steps.rate-limit.outputs.reset_time }} |" >> $GITHUB_STEP_SUMMARY
