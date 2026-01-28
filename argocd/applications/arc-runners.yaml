@@ -30,10 +30,20 @@ spec:
           namespace: arc-systems
           name: arc-controller-gha-rs-controller
 
+        # Listener template - force restart to fix job pickup (Issue #160)
+        listenerTemplate:
+          metadata:
+            annotations:
+              kubectl.kubernetes.io/restartedAt: "2026-01-28T15:45:00Z"
+
         # Explicit template for Docker-in-Docker support
         # Using custom template instead of containerMode for full control
         # This enables docker build/push for frontend releases
         template:
+          metadata:
+            annotations:
+              # Force pod recreation to fix listener sync issue (Issue #160)
+              kubectl.kubernetes.io/restartedAt: "2026-01-28T15:45:00Z"
           spec:
             initContainers:
               - name: init-dind-externals
