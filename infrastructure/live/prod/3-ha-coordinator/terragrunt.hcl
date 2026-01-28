@@ -67,7 +67,7 @@ inputs = {
   secondary_cloudspace_name  = dependency.cloudspace_secondary.outputs.cloudspace_name
   secondary_cloudspace_ready = try(dependency.cloudspace_secondary.outputs.cloudspace_ready, false)
   secondary_node_count       = try(dependency.cloudspace_secondary.outputs.current_nodes, 0)
-  secondary_max_nodes        = local.env_vars.locals.max_nodes
+  secondary_max_nodes        = local.env_vars.locals.max_nodes_secondary
 
   # HA configuration
   ha_enabled = local.env_vars.locals.ha_enabled

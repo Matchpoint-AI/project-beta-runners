@@ -27,6 +27,6 @@ inputs = {
   region       = local.env_vars.locals.region
   server_class = local.env_vars.locals.server_class
   min_nodes    = local.env_vars.locals.min_nodes
-  max_nodes    = local.env_vars.locals.max_nodes
+  max_nodes    = local.env_vars.locals.max_nodes_secondary
   bid_price    = local.env_vars.locals.bid_price
 }
