@@ -22,16 +22,19 @@ terraform {
   source = "${local.versions.locals.remote_modules}//cluster-base?ref=${local.versions.locals.modules_version}"
 }
 
-# Import existing bootstrap Application into terraform state
-# This is needed because the resource was created before terraform tracked it.
-# Once imported, this block can be removed.
-generate "import" {
-  path      = "import.tf"
+# State migration: kubernetes_manifest -> kubectl_manifest
+# The module now uses kubectl_manifest instead of kubernetes_manifest.
+# Remove the old resource from state and let kubectl_manifest adopt the existing Application.
+generate "migration" {
+  path      = "migration.tf"
   if_exists = "overwrite_terragrunt"
   contents  = <<-EOF
-    import {
-      to = kubernetes_manifest.bootstrap_application[0]
-      id = "apiVersion=argoproj.io/v1alpha1,kind=Application,namespace=argocd,name=project-beta-runners-bootstrap"
+    # Remove old kubernetes_manifest from state (resource changed to kubectl_manifest)
+    removed {
+      from = kubernetes_manifest.bootstrap_application
+      lifecycle {
+        destroy = false
+      }
     }
   EOF
 }

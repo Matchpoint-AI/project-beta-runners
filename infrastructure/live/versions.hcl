@@ -13,9 +13,9 @@
 
 locals {
   # Remote modules from spot-argocd-cloudspace repository
-  # v4.4.1: Wait for cloudspace Ready after scaling changes
+  # v4.4.2: Use kubectl_manifest to avoid CRD validation during plan
   remote_modules  = "git::https://github.com/Matchpoint-AI/spot-argocd-cloudspace.git"
-  modules_version = "v4.4.1"
+  modules_version = "v4.4.2"
 
   # Local modules in this repository
   # Used for: ha-coordinator
