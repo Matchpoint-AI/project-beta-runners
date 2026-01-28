@@ -1,12 +1,7 @@
 # Stage 2b: Cluster Base (Secondary) - Issue #117
 #
 # Installs ArgoCD on the secondary cloudspace using kubeconfig from Stage 1b.
-# Only runs after secondary cloudspace confirms it's ready.
-#
-# SKIP: This module is skipped until the secondary cloudspace is provisioned.
-# The kubernetes provider requires a real cluster connection even during plan.
-# TODO: Remove this skip block after secondary cloudspace is Ready.
-skip = true
+# Enabled for HA failover when primary cluster is unavailable (Issue #160).
 
 include "root" {
   path = find_in_parent_folders("root.hcl")
