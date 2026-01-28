@@ -45,6 +45,6 @@ inputs = {
   bootstrap_enabled         = true
   bootstrap_app_name        = "project-beta-runners-bootstrap-secondary"
   bootstrap_repo_url        = "https://github.com/Matchpoint-AI/project-beta-runners"
-  bootstrap_sync_path       = "argocd/applications"
+  bootstrap_sync_path       = "argocd/applications-secondary"
   bootstrap_target_revision = "main"
 }
