@@ -1,5 +1,10 @@
 # Terraform State Migration Guide
 
+> **Status: COMPLETED (January 2026)**
+> This one-time migration has been executed. The `argocd-apps` module was successfully
+> split into `arc-prereqs` + `argocd-bootstrap`. This document is retained for historical
+> reference only.
+
 This document describes how to migrate terraform state from the old `argocd-apps` module
 to the new split modules (`arc-prereqs` + `argocd-bootstrap`).
 
