@@ -1,0 +1,145 @@
+name: Force Sync ArgoCD
+
+on:
+  workflow_dispatch:
+    inputs:
+      cluster:
+        description: 'Which cluster to sync'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - both
+          - primary
+          - secondary
+      restart_arc:
+        description: 'Also restart ARC runner pods'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  SPOTCTL_VERSION: "0.1.1"
+  PRIMARY_CLUSTER: matchpoint-runners
+  SECONDARY_CLUSTER: matchpoint-runners-2
+
+jobs:
+  force-sync:
+    name: Force Sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Install spotctl
+        run: |
+          curl -sL "https://github.com/rackspace-spot/spotctl/releases/download/v${{ env.SPOTCTL_VERSION }}/spotctl-linux-amd64" -o spotctl
+          chmod +x spotctl
+          sudo mv spotctl /usr/local/bin/
+          spotctl --version
+
+      - name: Configure spotctl
+        env:
+          RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
+          RACKSPACE_ORG: ${{ secrets.RACKSPACE_ORG }}
+          RACKSPACE_REGION: ${{ secrets.RACKSPACE_REGION }}
+        run: |
+          printf 'org: "%s"\nrefreshToken: "%s"\nregion: "%s"\n' "$RACKSPACE_ORG" "$RACKSPACE_SPOT_TOKEN" "$RACKSPACE_REGION" > ~/.spot_config
+          chmod 600 ~/.spot_config
+
+      - name: Install kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+          kubectl version --client
+
+      - name: Sync primary cluster
+        if: inputs.cluster == 'both' || inputs.cluster == 'primary'
+        env:
+          CLUSTER: ${{ env.PRIMARY_CLUSTER }}
+        run: |
+          echo "=== Fetching kubeconfig for $CLUSTER ==="
+          mkdir -p ~/.kube
+          spotctl cloudspaces get-config --name "$CLUSTER"
+          export KUBECONFIG="$HOME/.kube/$CLUSTER.yaml"
+
+          echo "=== ArgoCD Application Status ==="
+          kubectl get applications -n argocd -o wide || echo "Could not list applications"
+
+          echo ""
+          echo "=== Force refresh bootstrap application ==="
+          kubectl patch application -n argocd project-beta-runners-bootstrap \
+            --type merge \
+            -p '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"hard"}}}' || echo "Patch failed"
+
+          echo ""
+          echo "=== Force refresh arc-runners application ==="
+          kubectl patch application -n argocd arc-runners \
+            --type merge \
+            -p '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"hard"}}}' || echo "Patch failed"
+
+          if [ "${{ inputs.restart_arc }}" = "true" ]; then
+            echo ""
+            echo "=== Restarting ARC components ==="
+            kubectl rollout restart deployment -n arc-systems || echo "No deployments in arc-systems"
+            kubectl rollout restart deployment -n arc-runners || echo "No deployments in arc-runners"
+
+            echo ""
+            echo "=== Deleting ephemeral runner pods to force re-registration ==="
+            kubectl delete pods -n arc-runners -l app.kubernetes.io/component=runner --grace-period=30 || echo "No runner pods found"
+          fi
+
+          echo ""
+          echo "=== Post-sync status ==="
+          kubectl get pods -n arc-systems -o wide || echo "No pods in arc-systems"
+          kubectl get pods -n arc-runners -o wide || echo "No pods in arc-runners"
+
+      - name: Sync secondary cluster
+        if: inputs.cluster == 'both' || inputs.cluster == 'secondary'
+        env:
+          CLUSTER: ${{ env.SECONDARY_CLUSTER }}
+        run: |
+          echo "=== Fetching kubeconfig for $CLUSTER ==="
+          mkdir -p ~/.kube
+          spotctl cloudspaces get-config --name "$CLUSTER"
+          export KUBECONFIG="$HOME/.kube/$CLUSTER.yaml"
+
+          echo "=== ArgoCD Application Status ==="
+          kubectl get applications -n argocd -o wide || echo "Could not list applications"
+
+          echo ""
+          echo "=== Force refresh bootstrap application ==="
+          kubectl patch application -n argocd project-beta-runners-bootstrap-secondary \
+            --type merge \
+            -p '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"hard"}}}' || echo "Patch failed"
+
+          echo ""
+          echo "=== Force refresh arc-runners application ==="
+          kubectl patch application -n argocd arc-runners \
+            --type merge \
+            -p '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"hard"}}}' || echo "Patch failed"
+
+          if [ "${{ inputs.restart_arc }}" = "true" ]; then
+            echo ""
+            echo "=== Restarting ARC components ==="
+            kubectl rollout restart deployment -n arc-systems || echo "No deployments in arc-systems"
+            kubectl rollout restart deployment -n arc-runners || echo "No deployments in arc-runners"
+
+            echo ""
+            echo "=== Deleting ephemeral runner pods to force re-registration ==="
+            kubectl delete pods -n arc-runners -l app.kubernetes.io/component=runner --grace-period=30 || echo "No runner pods found"
+          fi
+
+          echo ""
+          echo "=== Post-sync status ==="
+          kubectl get pods -n arc-systems -o wide || echo "No pods in arc-systems"
+          kubectl get pods -n arc-runners -o wide || echo "No pods in arc-runners"
+
+      - name: Summary
+        run: |
+          echo "=== Force Sync Complete ==="
+          echo "Cluster(s): ${{ inputs.cluster }}"
+          echo "ARC restart: ${{ inputs.restart_arc }}"
+          echo ""
+          echo "ArgoCD will re-sync within 30 seconds after the hard refresh annotation."
+          echo "Runner pods should re-register with GitHub within 2-3 minutes."
