@@ -18,9 +18,9 @@ spec:
         githubConfigUrl: https://github.com/Matchpoint-AI
         githubConfigSecret: arc-org-github-secret
 
-        # Runner label for secondary cluster (workflows use: runs-on: project-beta-runners-secondary)
-        # Using unique name to prevent GitHub App rate limit competition with primary cluster
-        runnerScaleSetName: project-beta-runners-secondary
+        # Runner label — must match workflows' runs-on value
+        # Both clusters use the same label so jobs route to all available runners
+        runnerScaleSetName: project-beta-runners
 
         # Autoscaling configuration
         minRunners: 10
