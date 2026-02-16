@@ -112,7 +112,11 @@ spec:
     namespace: arc-runners
   syncPolicy:
     automated:
-      prune: true
+      # prune must be false: ARC controller dynamically creates listener
+      # pods and roles that are not part of the helm chart manifest.
+      # prune: true causes ArgoCD to delete them, triggering an infinite
+      # create-delete loop that prevents the autoscaler from functioning.
+      prune: false
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
