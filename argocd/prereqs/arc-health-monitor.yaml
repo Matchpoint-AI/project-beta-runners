@@ -1,0 +1,209 @@
+# ARC Health Monitor
+# Auto-remediation for stuck ARC listener pods and OutOfSync ArgoCD apps
+#
+# Problem: ARC listener pods can get stuck in Pending state when nodes are
+# unavailable (spot preemption), and ArgoCD may fail to auto-sync application
+# changes. Without the listener, no runner pods are created and all CI stalls.
+#
+# Solution: CronJob checks every 5 minutes for:
+# 1. Listener pods stuck in Pending/CrashLoopBackOff > 10 minutes → delete to force reschedule
+# 2. ArgoCD arc-runners app OutOfSync → force hard refresh
+# 3. ARC controller not running → restart
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: arc-health-monitor
+  namespace: arc-systems
+  labels:
+    app.kubernetes.io/name: arc-health-monitor
+    app.kubernetes.io/component: monitoring
+---
+# ClusterRole needed because monitor checks pods in arc-runners,
+# deployments in arc-systems, and applications in argocd namespace
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: arc-health-monitor
+rules:
+  # Check and delete stuck listener/runner pods
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "delete"]
+  # Restart ARC controller deployment
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "patch"]
+  # Force-refresh ArgoCD applications
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    verbs: ["get", "list", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: arc-health-monitor
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: arc-health-monitor
+subjects:
+  - kind: ServiceAccount
+    name: arc-health-monitor
+    namespace: arc-systems
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: arc-health-monitor
+  namespace: arc-systems
+  labels:
+    app.kubernetes.io/name: arc-health-monitor
+    app.kubernetes.io/component: monitoring
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 120
+      template:
+        spec:
+          serviceAccountName: arc-health-monitor
+          restartPolicy: Never
+          containers:
+            - name: health-check
+              image: bitnami/kubectl:1.31
+              resources:
+                requests:
+                  cpu: "50m"
+                  memory: "64Mi"
+                limits:
+                  cpu: "100m"
+                  memory: "128Mi"
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  set -e
+                  REMEDIATED=false
+
+                  echo "=== ARC Health Monitor $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
+
+                  # ---------------------------------------------------------------
+                  # Check 1: Listener pod health
+                  # ---------------------------------------------------------------
+                  echo ""
+                  echo "--- Check 1: ARC Listener ---"
+
+                  LISTENER_POD=$(kubectl get pods -n arc-runners \
+                    -l app.kubernetes.io/component=listener \
+                    -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+
+                  if [ -z "$LISTENER_POD" ]; then
+                    # No listener pod at all — check if there are ANY pods in arc-runners
+                    RUNNER_COUNT=$(kubectl get pods -n arc-runners --no-headers 2>/dev/null | wc -l)
+                    if [ "$RUNNER_COUNT" -eq 0 ]; then
+                      echo "WARNING: No listener or runner pods found in arc-runners namespace"
+                      echo "Restarting ARC controller to trigger listener recreation..."
+                      kubectl rollout restart deployment -n arc-systems -l app.kubernetes.io/component=controller-manager 2>/dev/null || \
+                        kubectl rollout restart deployment -n arc-systems 2>/dev/null || true
+                      REMEDIATED=true
+                    fi
+                  else
+                    PHASE=$(kubectl get pod "$LISTENER_POD" -n arc-runners \
+                      -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
+
+                    echo "Listener: $LISTENER_POD (phase: $PHASE)"
+
+                    if [ "$PHASE" = "Pending" ] || [ "$PHASE" = "Unknown" ]; then
+                      # Check how long it's been pending
+                      CREATED=$(kubectl get pod "$LISTENER_POD" -n arc-runners \
+                        -o jsonpath='{.metadata.creationTimestamp}' 2>/dev/null || echo "")
+
+                      if [ -n "$CREATED" ]; then
+                        CREATED_EPOCH=$(date -d "$CREATED" +%s 2>/dev/null || echo "0")
+                        NOW_EPOCH=$(date +%s)
+                        AGE_MIN=$(( (NOW_EPOCH - CREATED_EPOCH) / 60 ))
+
+                        echo "Listener age: ${AGE_MIN} minutes"
+
+                        if [ "$AGE_MIN" -gt 10 ]; then
+                          echo "WARNING: Listener stuck in $PHASE for ${AGE_MIN}m (threshold: 10m)"
+                          echo "Deleting stuck listener to force reschedule..."
+                          kubectl delete pod "$LISTENER_POD" -n arc-runners --grace-period=10
+                          REMEDIATED=true
+                        else
+                          echo "Listener is $PHASE but within threshold."
+                        fi
+                      fi
+                    elif [ "$PHASE" = "Running" ]; then
+                      # Check for CrashLoopBackOff
+                      RESTARTS=$(kubectl get pod "$LISTENER_POD" -n arc-runners \
+                        -o jsonpath='{.status.containerStatuses[0].restartCount}' 2>/dev/null || echo "0")
+
+                      if [ "$RESTARTS" -gt 5 ]; then
+                        echo "WARNING: Listener has $RESTARTS restarts (threshold: 5)"
+                        echo "Deleting listener to get fresh pod..."
+                        kubectl delete pod "$LISTENER_POD" -n arc-runners --grace-period=10
+                        REMEDIATED=true
+                      else
+                        echo "Listener healthy (restarts: $RESTARTS)."
+                      fi
+                    fi
+                  fi
+
+                  # ---------------------------------------------------------------
+                  # Check 2: ArgoCD sync status
+                  # ---------------------------------------------------------------
+                  echo ""
+                  echo "--- Check 2: ArgoCD Sync ---"
+
+                  ARC_SYNC=$(kubectl get application arc-runners -n argocd \
+                    -o jsonpath='{.status.sync.status}' 2>/dev/null || echo "Unknown")
+
+                  echo "arc-runners sync status: $ARC_SYNC"
+
+                  if [ "$ARC_SYNC" = "OutOfSync" ]; then
+                    echo "WARNING: arc-runners is OutOfSync"
+                    echo "Forcing hard refresh..."
+                    kubectl patch application arc-runners -n argocd \
+                      --type merge \
+                      -p "{\"metadata\":{\"annotations\":{\"argocd.argoproj.io/refresh\":\"hard\"}}}"
+                    REMEDIATED=true
+                  fi
+
+                  # ---------------------------------------------------------------
+                  # Check 3: ARC controller health
+                  # ---------------------------------------------------------------
+                  echo ""
+                  echo "--- Check 3: ARC Controller ---"
+
+                  CONTROLLER_READY=$(kubectl get deployment -n arc-systems \
+                    -l app.kubernetes.io/component=controller-manager \
+                    -o jsonpath='{.items[0].status.readyReplicas}' 2>/dev/null || echo "0")
+
+                  CONTROLLER_DESIRED=$(kubectl get deployment -n arc-systems \
+                    -l app.kubernetes.io/component=controller-manager \
+                    -o jsonpath='{.items[0].spec.replicas}' 2>/dev/null || echo "1")
+
+                  echo "Controller: $CONTROLLER_READY/$CONTROLLER_DESIRED ready"
+
+                  if [ "$CONTROLLER_READY" = "0" ] || [ -z "$CONTROLLER_READY" ]; then
+                    echo "WARNING: ARC controller not ready"
+                    echo "Restarting controller..."
+                    kubectl rollout restart deployment -n arc-systems 2>/dev/null || true
+                    REMEDIATED=true
+                  fi
+
+                  # ---------------------------------------------------------------
+                  # Summary
+                  # ---------------------------------------------------------------
+                  echo ""
+                  if [ "$REMEDIATED" = "true" ]; then
+                    echo "REMEDIATION APPLIED — runner pods should recover within 2-3 minutes."
+                  else
+                    echo "All checks passed. ARC is healthy."
+                  fi
