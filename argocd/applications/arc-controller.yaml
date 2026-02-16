@@ -16,6 +16,9 @@ spec:
       values: |
         # ARC Controller configuration
         # Minimal configuration - controller watches for runner scale sets
+        flags:
+          - --runner-max-concurrent-reconciles=1
+          - --update-strategy=eventual
   destination:
     server: https://kubernetes.default.svc
     namespace: arc-systems

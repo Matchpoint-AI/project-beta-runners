@@ -69,8 +69,70 @@ jobs:
             echo "Rate limit status: OK ($CORE_REMAINING remaining)"
           fi
 
+      - name: Check Installation Rate Limit
+        id: installation-rate-limit
+        env:
+          APP_ID: ${{ secrets.ARC_GITHUB_APP_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.ARC_GITHUB_APP_PRIVATE_KEY }}
+        run: |
+          # Generate JWT for GitHub App authentication
+          NOW=$(date +%s)
+          IAT=$((NOW - 60))
+          EXP=$((NOW + 600))
+
+          HEADER=$(echo -n '{"alg":"RS256","typ":"JWT"}' | base64 -w 0 | tr '/+' '_-' | tr -d '=')
+          PAYLOAD=$(echo -n "{\"iat\":$IAT,\"exp\":$EXP,\"iss\":\"$APP_ID\"}" | base64 -w 0 | tr '/+' '_-' | tr -d '=')
+
+          SIGNATURE=$(echo -n "$HEADER.$PAYLOAD" \
+            | openssl dgst -sha256 -sign <(echo "$APP_PRIVATE_KEY") \
+            | base64 -w 0 | tr '/+' '_-' | tr -d '=')
+
+          JWT="$HEADER.$PAYLOAD.$SIGNATURE"
+
+          # Get installation ID
+          INSTALLATION_ID=$(curl -sf \
+            -H "Authorization: Bearer $JWT" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/app/installations \
+            | jq '.[0].id')
+
+          # Create installation access token and check rate limit headers
+          RESPONSE=$(curl -si \
+            -X POST \
+            -H "Authorization: Bearer $JWT" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/app/installations/$INSTALLATION_ID/access_tokens")
+
+          INSTALL_LIMIT=$(echo "$RESPONSE" | grep -i 'x-ratelimit-limit' | awk '{print $2}' | tr -d '\r')
+          INSTALL_REMAINING=$(echo "$RESPONSE" | grep -i 'x-ratelimit-remaining' | awk '{print $2}' | tr -d '\r')
+          INSTALL_RESET=$(echo "$RESPONSE" | grep -i 'x-ratelimit-reset' | awk '{print $2}' | tr -d '\r')
+
+          INSTALL_RESET_TIME=$(date -d "@$INSTALL_RESET" '+%Y-%m-%d %H:%M:%S UTC' 2>/dev/null || date -r "$INSTALL_RESET" '+%Y-%m-%d %H:%M:%S UTC')
+
+          echo "=== Installation Rate Limit Status ==="
+          echo "  Remaining: ${INSTALL_REMAINING:-unknown} / ${INSTALL_LIMIT:-unknown}"
+          echo "  Reset at: ${INSTALL_RESET_TIME:-unknown}"
+
+          echo "install_remaining=${INSTALL_REMAINING:-0}" >> $GITHUB_OUTPUT
+          echo "install_limit=${INSTALL_LIMIT:-0}" >> $GITHUB_OUTPUT
+          echo "install_reset_time=${INSTALL_RESET_TIME:-unknown}" >> $GITHUB_OUTPUT
+
+          # Alert if installation rate limit is low (< 20% remaining)
+          if [ -n "$INSTALL_REMAINING" ] && [ -n "$INSTALL_LIMIT" ] && [ "$INSTALL_LIMIT" -gt 0 ]; then
+            THRESHOLD=$((INSTALL_LIMIT / 5))
+            if [ "$INSTALL_REMAINING" -lt "$THRESHOLD" ]; then
+              echo "install_status=critical" >> $GITHUB_OUTPUT
+              echo "::error::CRITICAL: Installation rate limit low! $INSTALL_REMAINING / $INSTALL_LIMIT remaining."
+            else
+              echo "install_status=ok" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "install_status=unknown" >> $GITHUB_OUTPUT
+            echo "::warning::Could not determine installation rate limit"
+          fi
+
       - name: Create Issue on Critical
-        if: steps.rate-limit.outputs.status == 'critical'
+        if: steps.rate-limit.outputs.status == 'critical' || steps.installation-rate-limit.outputs.install_status == 'critical'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -92,15 +154,18 @@ jobs:
 **Status:** CRITICAL
 
 **Core API Remaining:** ${{ steps.rate-limit.outputs.core_remaining }} / ${{ steps.rate-limit.outputs.core_limit }}
-**Reset Time:** ${{ steps.rate-limit.outputs.reset_time }}
+**Installation API Remaining:** ${{ steps.installation-rate-limit.outputs.install_remaining }} / ${{ steps.installation-rate-limit.outputs.install_limit }}
+**Core Reset Time:** ${{ steps.rate-limit.outputs.reset_time }}
+**Installation Reset Time:** ${{ steps.installation-rate-limit.outputs.install_reset_time }}
 
 ### Impact
-GitHub API rate limit is critically low. CI operations may start failing.
+GitHub API rate limit is critically low. CI operations and ARC runner registration may start failing.
 
 ### Recommended Actions
-1. Identify high-frequency API consumers
+1. Identify high-frequency API consumers (check ARC controller logs for 403s)
 2. Consider pausing non-critical workflows
-3. Wait for rate limit reset at the time indicated above
+3. If installation rate limit is low, reduce runner scale: \`kubectl patch autoscalingrunnerset -n arc-runners --type merge -p '{\"spec\":{\"maxRunners\":5}}'\`
+4. Wait for rate limit reset at the time indicated above
 
 ---
 *This issue was automatically created by the rate limit monitoring workflow.*"
@@ -109,7 +174,9 @@ GitHub API rate limit is critically low. CI operations may start failing.
             echo "Rate limit alert issue #$EXISTING_ISSUE already exists, skipping creation"
             gh issue comment "$EXISTING_ISSUE" \
               --repo ${{ github.repository }} \
-              --body "**Update:** Rate limit still critical. Remaining: ${{ steps.rate-limit.outputs.core_remaining }}. Reset at: ${{ steps.rate-limit.outputs.reset_time }}"
+              --body "**Update:** Rate limit still critical.
+- Core API: ${{ steps.rate-limit.outputs.core_remaining }} remaining. Reset at: ${{ steps.rate-limit.outputs.reset_time }}
+- Installation API: ${{ steps.installation-rate-limit.outputs.install_remaining }} / ${{ steps.installation-rate-limit.outputs.install_limit }} remaining. Reset at: ${{ steps.installation-rate-limit.outputs.install_reset_time }}"
           fi
 
       - name: Summary
@@ -118,6 +185,9 @@ GitHub API rate limit is critically low. CI operations may start failing.
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Status | ${{ steps.rate-limit.outputs.status }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Core Status | ${{ steps.rate-limit.outputs.status }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Core Remaining | ${{ steps.rate-limit.outputs.core_remaining }} / ${{ steps.rate-limit.outputs.core_limit }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Reset Time | ${{ steps.rate-limit.outputs.reset_time }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Core Reset Time | ${{ steps.rate-limit.outputs.reset_time }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Installation Status | ${{ steps.installation-rate-limit.outputs.install_status }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Installation Remaining | ${{ steps.installation-rate-limit.outputs.install_remaining }} / ${{ steps.installation-rate-limit.outputs.install_limit }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Installation Reset Time | ${{ steps.installation-rate-limit.outputs.install_reset_time }} |" >> $GITHUB_STEP_SUMMARY

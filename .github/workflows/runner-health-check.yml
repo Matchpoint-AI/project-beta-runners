@@ -1,0 +1,118 @@
+name: Runner Health Check
+
+on:
+  schedule:
+    # Run every 5 minutes
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  health-check:
+    name: Check Runner Health
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install spotctl
+        run: |
+          curl -sL https://api.spot.io/spot-connect/spotctl/latest/linux/amd64/spotctl -o /usr/local/bin/spotctl
+          chmod +x /usr/local/bin/spotctl
+
+      - name: Configure kubeconfig
+        env:
+          SPOT_TOKEN: ${{ secrets.SPOT_TOKEN }}
+          SPOT_ACCOUNT: ${{ secrets.SPOT_ACCOUNT }}
+          OCEAN_CLUSTER_ID: ${{ secrets.OCEAN_CLUSTER_ID }}
+        run: |
+          spotctl configure --token "$SPOT_TOKEN" --account "$SPOT_ACCOUNT"
+          spotctl ocean spark get cluster-kubeconfig --cluster-id "$OCEAN_CLUSTER_ID" > kubeconfig.yaml
+          echo "KUBECONFIG=$(pwd)/kubeconfig.yaml" >> $GITHUB_ENV
+
+      - name: Check runner pod health
+        id: health
+        run: |
+          # Get runner pod statuses
+          TOTAL=$(kubectl get pods -n arc-runners --no-headers 2>/dev/null | wc -l)
+          NOT_READY=$(kubectl get pods -n arc-runners --no-headers 2>/dev/null | grep -cE 'NotReady|Pending|CrashLoopBackOff|Error' || true)
+
+          echo "total=$TOTAL" >> $GITHUB_OUTPUT
+          echo "not_ready=$NOT_READY" >> $GITHUB_OUTPUT
+
+          echo "Total runner pods: $TOTAL"
+          echo "Not ready pods: $NOT_READY"
+
+          if [ "$TOTAL" -eq 0 ]; then
+            echo "status=ok" >> $GITHUB_OUTPUT
+            echo "No runner pods found — nothing to check"
+            exit 0
+          fi
+
+          # Calculate percentage of unhealthy pods
+          PCT=$((NOT_READY * 100 / TOTAL))
+          echo "Unhealthy percentage: ${PCT}%"
+
+          if [ "$PCT" -gt 50 ] && [ "$NOT_READY" -gt 1 ]; then
+            echo "status=stuck" >> $GITHUB_OUTPUT
+            echo "::error::Runners appear stuck: $NOT_READY / $TOTAL pods are not ready (${PCT}%)"
+          else
+            echo "status=ok" >> $GITHUB_OUTPUT
+            echo "Runner health: OK"
+          fi
+
+      - name: Recover stuck runners
+        if: steps.health.outputs.status == 'stuck'
+        run: |
+          echo "=== Recovering stuck runners ==="
+
+          # Delete pods that have been in NotReady/Pending for more than 5 minutes
+          STALE_PODS=$(kubectl get pods -n arc-runners --no-headers \
+            --field-selector=status.phase!=Running 2>/dev/null \
+            | awk '{print $1}')
+
+          if [ -n "$STALE_PODS" ]; then
+            echo "Deleting stale pods:"
+            echo "$STALE_PODS"
+            echo "$STALE_PODS" | xargs kubectl delete pod -n arc-runners --grace-period=30
+          fi
+
+          # Restart the controller to clear any stuck reconciliation state
+          echo "Restarting ARC controller..."
+          kubectl rollout restart deployment -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
+          kubectl rollout status deployment -n arc-systems -l app.kubernetes.io/name=gha-rs-controller --timeout=120s
+
+          echo "Recovery complete at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+
+      - name: Post to rate-limit-alert issue
+        if: steps.health.outputs.status == 'stuck'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          EXISTING_ISSUE=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --state open \
+            --label "rate-limit-alert" \
+            --json number \
+            --jq '.[0].number // empty')
+
+          if [ -n "$EXISTING_ISSUE" ]; then
+            gh issue comment "$EXISTING_ISSUE" \
+              --repo ${{ github.repository }} \
+              --body "**Runner Health Check Recovery**
+
+Detected ${{ steps.health.outputs.not_ready }} / ${{ steps.health.outputs.total }} runner pods in unhealthy state.
+
+**Actions taken:**
+- Deleted stale pods
+- Restarted ARC controller
+
+*Automated recovery at $(date -u '+%Y-%m-%d %H:%M:%S UTC')*"
+          fi
+
+      - name: Summary
+        run: |
+          echo "## Runner Health Check" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Status | ${{ steps.health.outputs.status }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Total Pods | ${{ steps.health.outputs.total }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Not Ready | ${{ steps.health.outputs.not_ready }} |" >> $GITHUB_STEP_SUMMARY
