@@ -22,7 +22,11 @@ spec:
         runnerScaleSetName: project-beta-runners
 
         # Autoscaling configuration
-        minRunners: 10
+        # 12 nodes × 7.5 CPU allocatable = 90 CPU total
+        # Each pod requests 1.5 CPU (1 runner + 0.5 dind)
+        # Min footprint: 5 × 1.5 = 7.5 CPU (was 10 × 3 = 30 CPU)
+        # Max capacity: ~60 runners (was ~30)
+        minRunners: 5
         maxRunners: 50
 
         # Controller reference
@@ -60,11 +64,11 @@ spec:
                     mountPath: /home/runner/externals
                 resources:
                   requests:
-                    cpu: "2"
-                    memory: 4Gi
+                    cpu: "1"
+                    memory: 2Gi
                   limits:
-                    cpu: "4"
-                    memory: 8Gi
+                    cpu: "3"
+                    memory: 6Gi
               - name: dind
                 image: docker:27-dind
                 args:
@@ -87,8 +91,8 @@ spec:
                     mountPath: /var/lib/docker
                 resources:
                   requests:
-                    cpu: "1"
-                    memory: 2Gi
+                    cpu: "500m"
+                    memory: 1Gi
                   limits:
                     cpu: "2"
                     memory: 4Gi
@@ -108,7 +112,7 @@ spec:
     namespace: arc-runners
   syncPolicy:
     automated:
-      prune: false
+      prune: true
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
