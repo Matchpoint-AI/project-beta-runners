@@ -22,8 +22,11 @@ spec:
         runnerScaleSetName: project-beta-runners
 
         # Autoscaling configuration
-        minRunners: 3
-        maxRunners: 15
+        # 12 nodes × ~6 CPU allocatable each = ~72 CPU total
+        # Each pod requests 1.5 CPU (1 runner + 0.5 dind)
+        # Conservative max: 30 runners × 1.5 = 45 CPU
+        minRunners: 5
+        maxRunners: 30
 
         # Controller reference
         controllerServiceAccount:
