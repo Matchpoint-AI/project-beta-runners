@@ -79,7 +79,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────────────
   # Plan: Terragrunt plan for GKE stages (requires GCP auth)
   # ─────────────────────────────────────────────────────────────────────────────
-  # NOTE: Rackspace stages (1-cloudspace*, 2-cluster-base*, 3-ha-coordinator)
+  # NOTE: The GKE argocd stage needs a live cluster (Kubernetes provider) and
   # are excluded from CI plan during GKE migration. They continue to run in
   # production via the existing deploy workflow. Rackspace stages will be
   # removed entirely in Phase 5.
@@ -125,11 +125,6 @@ jobs:
           # Exclude Rackspace stages (run in parallel until Phase 5 decommission)
           # Exclude argocd stage (needs Kubernetes provider / live cluster)
           EXCLUDE_DIRS=""
-          EXCLUDE_DIRS="$EXCLUDE_DIRS --terragrunt-exclude-dir 1-cloudspace"
-          EXCLUDE_DIRS="$EXCLUDE_DIRS --terragrunt-exclude-dir 1-cloudspace-secondary"
-          EXCLUDE_DIRS="$EXCLUDE_DIRS --terragrunt-exclude-dir 2-cluster-base"
-          EXCLUDE_DIRS="$EXCLUDE_DIRS --terragrunt-exclude-dir 2-cluster-base-secondary"
-          EXCLUDE_DIRS="$EXCLUDE_DIRS --terragrunt-exclude-dir 3-ha-coordinator"
           EXCLUDE_DIRS="$EXCLUDE_DIRS --terragrunt-exclude-dir argocd"
           echo "::notice::Planning GKE stages only (Rackspace + argocd stages excluded)"
 
