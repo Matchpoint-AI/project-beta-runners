@@ -36,7 +36,7 @@ jobs:
             echo "::error::Files need formatting. Run: tofu fmt -recursive infrastructure/"
             exit 1
           fi
-          echo "✅ All files formatted correctly"
+          echo "All files formatted correctly"
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Docs: Documentation check (fast, no credentials)
@@ -74,11 +74,15 @@ jobs:
             echo "Run: terraform-docs markdown table --output-file README.md --output-mode inject <module>"
             exit 1
           fi
-          echo "✅ All module docs up to date"
+          echo "All module docs up to date"
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Plan: Terragrunt plan (requires GCP auth)
+  # Plan: Terragrunt plan for GKE stages (requires GCP auth)
   # ─────────────────────────────────────────────────────────────────────────────
+  # NOTE: Rackspace stages (1-cloudspace*, 2-cluster-base*, 3-ha-coordinator)
+  # are excluded from CI plan during GKE migration. They continue to run in
+  # production via the existing deploy workflow. Rackspace stages will be
+  # removed entirely in Phase 5.
   plan:
     name: Plan
     runs-on: ubuntu-latest
@@ -109,67 +113,25 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      - name: Setup spotctl
-        env:
-          RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
-        run: |
-          # Install spotctl (used by terraform external data source)
-          curl -sL "https://github.com/rackspace-spot/spotctl/releases/download/v0.1.1/spotctl-linux-amd64" -o /tmp/spotctl
-          chmod +x /tmp/spotctl
-
-          # Configure spotctl
-          mkdir -p ~/.kube
-          printf 'org: "matchpoint-ai"\nrefreshToken: "%s"\nregion: "us-central-dfw-1"\n' "$RACKSPACE_SPOT_TOKEN" > ~/.spot_config
-          chmod 600 ~/.spot_config
-
-      - name: Check cluster connectivity
-        id: cluster_check
-        env:
-          RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
-        run: |
-          # Try to fetch kubeconfig and test cluster connectivity
-          CLOUDSPACE_NAME="matchpoint-runners"
-          SPOTCTL="/tmp/spotctl"
-
-          echo "Checking cluster connectivity..."
-          if $SPOTCTL cloudspaces get-config --name "$CLOUDSPACE_NAME" 2>/dev/null; then
-            KUBECONFIG="$HOME/.kube/$CLOUDSPACE_NAME.yaml"
-            if [ -f "$KUBECONFIG" ]; then
-              export KUBECONFIG
-              # Test API connectivity with 10s timeout
-              if timeout 10 kubectl cluster-info &>/dev/null; then
-                echo "cluster_reachable=true" >> $GITHUB_OUTPUT
-                echo "✅ Cluster API is reachable"
-              else
-                echo "cluster_reachable=false" >> $GITHUB_OUTPUT
-                echo "⚠️ Cluster API timeout - will skip Kubernetes-dependent stages"
-              fi
-            else
-              echo "cluster_reachable=false" >> $GITHUB_OUTPUT
-              echo "⚠️ Kubeconfig not available"
-            fi
-          else
-            echo "cluster_reachable=false" >> $GITHUB_OUTPUT
-            echo "⚠️ Could not fetch kubeconfig"
-          fi
-
-      - name: Terragrunt Plan
+      - name: Terragrunt Plan (GKE stages)
         id: plan
         working-directory: infrastructure/live/prod
         env:
           GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-          RACKSPACE_SPOT_TOKEN: ${{ secrets.RACKSPACE_SPOT_API_TOKEN }}
-          INFRA_GH_TOKEN: ${{ secrets.INFRA_GH_TOKEN }}
         run: |
           set +e
 
-          # Exclude cluster-base from CI plans
-          # The kubernetes provider requires actual cluster connection during plan,
-          # which doesn't work reliably in CI even with terragrunt generate blocks.
-          # Cluster-base is only applied during deploy workflow.
-          EXCLUDE_DIRS="--terragrunt-exclude-dir 2-cluster-base --terragrunt-exclude-dir 2-cluster-base-secondary"
-          echo "::notice::Excluding cluster-base stages from CI plan (applied only during deploy)"
+          # Exclude Rackspace stages (run in parallel until Phase 5 decommission)
+          # Exclude argocd stage (needs Kubernetes provider / live cluster)
+          EXCLUDE_DIRS=""
+          EXCLUDE_DIRS="$EXCLUDE_DIRS --terragrunt-exclude-dir 1-cloudspace"
+          EXCLUDE_DIRS="$EXCLUDE_DIRS --terragrunt-exclude-dir 1-cloudspace-secondary"
+          EXCLUDE_DIRS="$EXCLUDE_DIRS --terragrunt-exclude-dir 2-cluster-base"
+          EXCLUDE_DIRS="$EXCLUDE_DIRS --terragrunt-exclude-dir 2-cluster-base-secondary"
+          EXCLUDE_DIRS="$EXCLUDE_DIRS --terragrunt-exclude-dir 3-ha-coordinator"
+          EXCLUDE_DIRS="$EXCLUDE_DIRS --terragrunt-exclude-dir argocd"
+          echo "::notice::Planning GKE stages only (Rackspace + argocd stages excluded)"
 
           # Run plan with exclusions
           # Using -lock=false because plans are read-only and shouldn't compete for state locks
@@ -193,7 +155,7 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `#### ${status} Terragrunt Plan\n<details><summary>Show Plan</summary>\n\n\`\`\`\n${output}\n\`\`\`\n</details>`
+              body: `#### ${status} Terragrunt Plan (GKE stages)\n<details><summary>Show Plan</summary>\n\n\`\`\`\n${output}\n\`\`\`\n</details>`
             });
 
       - name: Check Plan Result
