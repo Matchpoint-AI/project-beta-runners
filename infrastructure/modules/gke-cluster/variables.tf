@@ -46,3 +46,9 @@ variable "github_repo" {
   description = "GitHub repository in org/repo format for WIF binding"
   type        = string
 }
+
+
+variable "wif_pool_id" {
+  description = "Short ID of the existing Workload Identity Pool (e.g. github-actions-pool). The project number is looked up via data.google_project."
+  type        = string
+}

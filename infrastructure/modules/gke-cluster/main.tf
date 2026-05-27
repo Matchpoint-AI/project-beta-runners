@@ -22,31 +22,27 @@ resource "google_container_cluster" "runners" {
   deletion_protection = false
 }
 
-# Renamed from "spot" -> "ondemand". Phase 1 ships on regular CPU quota
-# because PREEMPTIBLE_CPUS is at 0 across the project (GCP quota migration in flight).
-# Flip spot = true and rename back once Spot quota is available; cost delta at
-# scale-to-zero workloads is single-digit dollars/mo.
-resource "google_container_node_pool" "ondemand" {
-  name     = "ondemand-runners"
+resource "google_container_node_pool" "spot" {
+  name     = "spot-runners"
   cluster  = google_container_cluster.runners.name
   location = var.zone
   project  = var.project_id
 
   node_config {
     machine_type = var.machine_type
-    spot         = false
+    spot         = true
     disk_size_gb = var.disk_size_gb
     oauth_scopes = ["https://www.googleapis.com/auth/cloud-platform"]
 
     taint {
-      key    = "ondemand-runners"
+      key    = "spot-runners"
       value  = "true"
       effect = "NO_SCHEDULE"
     }
 
     labels = {
       workload = "github-runner"
-      compute  = "ondemand"
+      spot     = "true"
     }
   }
 
@@ -69,11 +65,18 @@ resource "google_service_account" "deployer" {
   project      = var.project_id
 }
 
-# WIF binding: allow GitHub Actions to impersonate the deployer SA
+# Look up project number — WIF principalSet requires project NUMBER, not ID
+data "google_project" "this" {
+  project_id = var.project_id
+}
+
+# WIF binding: allow GitHub Actions to impersonate the deployer SA.
+# `principalSet://iam.googleapis.com/projects/<NUMBER>/locations/...` — uses
+# the project number (not ID), per GCP IAM resource naming requirements.
 resource "google_service_account_iam_member" "deployer_wif" {
   service_account_id = google_service_account.deployer.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${var.wif_pool_name}/attribute.repository/${var.github_repo}"
+  member             = "principalSet://iam.googleapis.com/projects/${data.google_project.this.number}/locations/global/workloadIdentityPools/${var.wif_pool_id}/attribute.repository/${var.github_repo}"
 }
 
 # Grant deployer SA the permissions needed to manage GKE + ArgoCD
