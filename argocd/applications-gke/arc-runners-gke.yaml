@@ -30,7 +30,7 @@ spec:
         template:
           spec:
             tolerations:
-              - key: spot-runners
+              - key: ondemand-runners
                 value: "true"
                 effect: NoSchedule
             nodeSelector:
