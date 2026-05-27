@@ -34,11 +34,10 @@ resource "google_container_node_pool" "spot" {
     disk_size_gb = var.disk_size_gb
     oauth_scopes = ["https://www.googleapis.com/auth/cloud-platform"]
 
-    taint {
-      key    = "spot-runners"
-      value  = "true"
-      effect = "NO_SCHEDULE"
-    }
+    # No taint: Phase 1 ships with system pods (ArgoCD, ARC controller, kube-system)
+    # sharing the Spot pool. Trade-off: preemption may briefly restart ArgoCD/ARC,
+    # but they're stateless. Add a dedicated untainted system pool in a later phase
+    # if preemption interferes with operations.
 
     labels = {
       workload = "github-runner"

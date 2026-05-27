@@ -29,10 +29,6 @@ spec:
 
         template:
           spec:
-            tolerations:
-              - key: spot-runners
-                value: "true"
-                effect: NoSchedule
             nodeSelector:
               workload: github-runner
             initContainers:
