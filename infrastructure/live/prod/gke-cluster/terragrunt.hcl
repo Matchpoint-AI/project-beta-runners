@@ -24,5 +24,6 @@ inputs = {
   min_node_count = local.gke_vars.locals.min_node_count
   max_node_count = local.gke_vars.locals.max_node_count
   wif_pool_name  = local.gke_vars.locals.wif_pool_name
+  wif_pool_id    = local.gke_vars.locals.wif_pool_id
   github_repo    = local.gke_vars.locals.github_repo
 }

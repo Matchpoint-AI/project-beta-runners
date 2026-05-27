@@ -18,7 +18,8 @@ locals {
   max_node_count = 25
 
   # WIF (existing pool in project-beta-407300)
-  wif_pool_name = "projects/project-beta-407300/locations/global/workloadIdentityPools/github-actions-pool"
+  wif_pool_name = "projects/project-beta-407300/locations/global/workloadIdentityPools/github-actions-pool"  # legacy, unused
+  wif_pool_id   = "github-actions-pool"
   github_repo   = "Matchpoint-AI/project-beta-runners"
 
   # ArgoCD
