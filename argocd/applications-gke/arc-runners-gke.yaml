@@ -16,7 +16,7 @@ spec:
     helm:
       releaseName: arc-runners-gke
       values: |
-        githubConfigUrl: https://github.com/Matchpoint-AI/matchpoint
+        githubConfigUrl: https://github.com/Matchpoint-AI
         githubConfigSecret: arc-gke-github-app-secret
 
         runnerScaleSetName: gke-beta-runners
