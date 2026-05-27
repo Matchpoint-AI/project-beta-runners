@@ -1,0 +1,116 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: arc-runners-gke
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: ghcr.io/actions/actions-runner-controller-charts
+    targetRevision: 0.13.1
+    chart: gha-runner-scale-set
+    helm:
+      releaseName: arc-runners-gke
+      values: |
+        githubConfigUrl: https://github.com/Matchpoint-AI/matchpoint
+        githubConfigSecret: arc-gke-github-app-secret
+
+        runnerScaleSetName: gke-beta-runners
+        minRunners: 0
+        maxRunners: 25
+
+        controllerServiceAccount:
+          namespace: arc-systems
+          name: arc-controller-gke-gha-rs-controller
+
+        template:
+          spec:
+            tolerations:
+              - key: spot-runners
+                value: "true"
+                effect: NoSchedule
+            nodeSelector:
+              workload: github-runner
+            initContainers:
+              - name: init-dind-externals
+                image: ghcr.io/actions/actions-runner:latest
+                command: ["cp", "-r", "-v", "/home/runner/externals/.", "/home/runner/tmpDir/"]
+                volumeMounts:
+                  - name: dind-externals
+                    mountPath: /home/runner/tmpDir
+            containers:
+              - name: runner
+                image: ghcr.io/actions/actions-runner:latest
+                command: ["/home/runner/run.sh"]
+                env:
+                  - name: DOCKER_HOST
+                    value: unix:///var/run/docker.sock
+                  - name: RUNNER_WAIT_FOR_DOCKER_IN_SECONDS
+                    value: "120"
+                volumeMounts:
+                  - name: work
+                    mountPath: /home/runner/_work
+                  - name: dind-sock
+                    mountPath: /var/run
+                  - name: dind-externals
+                    mountPath: /home/runner/externals
+                resources:
+                  requests:
+                    cpu: "2"
+                    memory: 4Gi
+                  limits:
+                    cpu: "3"
+                    memory: 8Gi
+              - name: dind
+                image: docker:27-dind
+                args:
+                  - dockerd
+                  - --host=unix:///var/run/docker.sock
+                  - --group=$(DOCKER_GROUP_GID)
+                env:
+                  - name: DOCKER_GROUP_GID
+                    value: "123"
+                securityContext:
+                  privileged: true
+                volumeMounts:
+                  - name: work
+                    mountPath: /home/runner/_work
+                  - name: dind-sock
+                    mountPath: /var/run
+                  - name: dind-externals
+                    mountPath: /home/runner/externals
+                  - name: docker-storage
+                    mountPath: /var/lib/docker
+                resources:
+                  requests:
+                    cpu: "500m"
+                    memory: 1Gi
+                  limits:
+                    cpu: "2"
+                    memory: 4Gi
+            terminationGracePeriodSeconds: 600
+            volumes:
+              - name: work
+                emptyDir:
+                  sizeLimit: 30Gi
+              - name: dind-sock
+                emptyDir: {}
+              - name: dind-externals
+                emptyDir: {}
+              - name: docker-storage
+                emptyDir:
+                  sizeLimit: 30Gi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: arc-runners
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
