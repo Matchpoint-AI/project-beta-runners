@@ -22,27 +22,31 @@ resource "google_container_cluster" "runners" {
   deletion_protection = false
 }
 
-resource "google_container_node_pool" "spot" {
-  name     = "spot-runners"
+# Renamed from "spot" -> "ondemand". Phase 1 ships on regular CPU quota
+# because PREEMPTIBLE_CPUS is at 0 across the project (GCP quota migration in flight).
+# Flip spot = true and rename back once Spot quota is available; cost delta at
+# scale-to-zero workloads is single-digit dollars/mo.
+resource "google_container_node_pool" "ondemand" {
+  name     = "ondemand-runners"
   cluster  = google_container_cluster.runners.name
   location = var.zone
   project  = var.project_id
 
   node_config {
     machine_type = var.machine_type
-    spot         = true
+    spot         = false
     disk_size_gb = var.disk_size_gb
     oauth_scopes = ["https://www.googleapis.com/auth/cloud-platform"]
 
     taint {
-      key    = "spot-runners"
+      key    = "ondemand-runners"
       value  = "true"
       effect = "NO_SCHEDULE"
     }
 
     labels = {
       workload = "github-runner"
-      spot     = "true"
+      compute  = "ondemand"
     }
   }
 
