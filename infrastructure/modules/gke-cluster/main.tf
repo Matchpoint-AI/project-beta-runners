@@ -22,26 +22,25 @@ resource "google_container_cluster" "runners" {
   deletion_protection = false
 }
 
-resource "google_container_node_pool" "spot" {
-  name     = "spot-runners"
+# On-demand node pool (was Spot — see commit history).
+# Migrated from Spot 2026-05-30 because long-running CI Test jobs (~7-10 min
+# vitest --coverage) were being SIGINT'd by Spot preemption mid-run, leaving
+# PRs unmergeable. Cost delta: e2-standard-4 on-demand ~$0.134/hr vs Spot
+# ~$0.034/hr (4x). With autoscaler min=0, idle cost is $0.
+resource "google_container_node_pool" "runners" {
+  name     = "runners"
   cluster  = google_container_cluster.runners.name
   location = var.zone
   project  = var.project_id
 
   node_config {
     machine_type = var.machine_type
-    spot         = true
+    spot         = false
     disk_size_gb = var.disk_size_gb
     oauth_scopes = ["https://www.googleapis.com/auth/cloud-platform"]
 
-    # No taint: Phase 1 ships with system pods (ArgoCD, ARC controller, kube-system)
-    # sharing the Spot pool. Trade-off: preemption may briefly restart ArgoCD/ARC,
-    # but they're stateless. Add a dedicated untainted system pool in a later phase
-    # if preemption interferes with operations.
-
     labels = {
       workload = "github-runner"
-      spot     = "true"
     }
   }
 
