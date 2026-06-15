@@ -24,9 +24,9 @@ spec:
         # Autoscaling configuration
         # 12 nodes × ~6 CPU allocatable each = ~72 CPU total
         # Each pod requests 1.5 CPU (1 runner + 0.5 dind)
-        # Conservative max: 30 runners × 1.5 = 45 CPU
-        minRunners: 5
-        maxRunners: 30
+        # Target max: 40 runners × 1.5 = 60 CPU (within 72 CPU cluster total)
+        minRunners: 10
+        maxRunners: 40
 
         # Controller reference
         controllerServiceAccount:
